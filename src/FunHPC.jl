@@ -1,5 +1,5 @@
 module FunHPC
 
-# package code goes here
+using Comm, Par, Refs
 
-end # module
+end
