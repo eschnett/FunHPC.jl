@@ -8,9 +8,9 @@ include("FoldableTest.jl")
 include("FunctorTest.jl")
 include("StencilFunctorTest.jl")
 include("MonadTest.jl")
+include("MultiDictsTest.jl")
 
 using Comm
 Comm.init()
 include("CommTest.jl")
-# include("MultiDictsTest.jl")
 Comm.finalize()

@@ -1,3 +1,5 @@
+module MultiDictsTest
+
 using MultiDicts
 using Base.Test
 
@@ -34,3 +36,5 @@ test(Char, Int)
 test(Char, Any)
 test(Any, Int)
 test(Any, Any)
+
+end
