@@ -18,8 +18,9 @@ before_install:
   - if [[ $(uname) == Darwin ]]; then brew update; brew install openmpi; fi
 install:
   - julia -e 'Pkg.add("Coverage")'
-script:
+before_script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+script:
   - julia -e 'Pkg.clone(pwd()); Pkg.build("FunHPC"); Pkg.test("FunHPC"; coverage=true)'
 after_success:
   - julia -e 'cd(Pkg.dir("FunHPC")); using Coverage; Codecov.submit(process_folder())'
