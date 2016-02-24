@@ -6,6 +6,7 @@ unshift!(LOAD_PATH, "../src")
 include("FunsTest.jl")
 include("FoldableTest.jl")
 include("FunctorTest.jl")
+include("StencilFunctorTest.jl")
 include("MonadTest.jl")
 
 using Comm
