@@ -2,7 +2,7 @@ module Comm
 
 using Funs, MPI
 
-import Base.LPROC, Base.PGRP
+## import Base.LPROC, Base.PGRP
 
 export ProcID, procid
 export myproc, procs, nprocs
@@ -21,6 +21,7 @@ type CommInfo
     comm::MPI.Comm
     rank::Int
     size::Int
+    manager::MPIManager
     CommInfo() = new()
 end
 const comminfo = CommInfo()
@@ -30,27 +31,29 @@ function init()
     if !comminfo.initialized
         MPI.Init()
     end
-    comminfo.comm = MPI.Comm_dup(MPI.COMM_WORLD)
+    # comminfo.comm = MPI.Comm_dup(MPI.COMM_WORLD)
+    comminfo.comm = MPI.COMM_WORLD
     comminfo.rank = MPI.Comm_rank(comminfo.comm)
     comminfo.size = MPI.Comm_size(comminfo.comm)
-    # Override some Base settings to describe our multi-process setup
-    LPROC.id = myproc()
-    PGRP.workers = collect(procs())
+    ## # Override some Base settings to describe our multi-process setup
+    ## LPROC.id = myproc()
+    ## PGRP.workers = collect(procs())
+    # This call returns only on the root process
+    comminfo.manager = MPI.start(MPI_TRANSPORT_ALL)
 end
 
 function finalize()
-    # Undo override above to prevent errors during shutdown
-    LPROC.id = 1
-    PGRP.workers = []
-    MPI.Comm_free(comminfo.comm)
+    ## # Undo override above to prevent errors during shutdown
+    ## LPROC.id = 1
+    ## PGRP.workers = []
     if comminfo.initialized && !MPI.Finalized()
-        MPI.Finalize()
+        @mpi_do comminfo.manager MPI.Finalize()
     end
 end
 
 myproc() = comminfo.rank+1
-nprocs() = comminfo.size
-procs() = 1:nprocs()
+# nprocs() = comminfo.size
+# procs() = 1:nprocs()
 
 
 
@@ -65,8 +68,14 @@ const commstate = CommState()
 const TAG = 0
 const META_TAG = 1
 
+# Prevent unnecessary specialization
+immutable Item
+    item::Any
+end
+(item::Item)() = item.item()
+
 # TODO: Use TestSome
-function send_item(p::Integer, t::Integer, item)
+function send_item(p::Int, t::Int, item::Item)
     @assert commstate.use_recv_loop
     req = MPI.isend(item, p-1, t, comminfo.com)
     while t==META_TAG || !commstate.stop_sending
@@ -75,15 +84,18 @@ function send_item(p::Integer, t::Integer, item)
         yield()
     end
     # MPI.cancel(req)
+    nothing
 end
 
-function recv_item(p::Integer, t::Integer)
+function recv_item(p::Int, t::Int)
     @assert commstate.use_recv_loop
     while t==META_TAG || !commstate.stop_receiving
-        flag, item, status = MPI.irecv(p==0 ? MPI.ANY_SOURCE : p-1, t, comminfo.com)
-        if flag return item end
+        flag, item, status =
+            MPI.irecv(p==0 ? MPI.ANY_SOURCE : p-1, t, comminfo.com)
+        if flag return item::Item end
         yield()
     end
+    Item(nothing)
 end
 
 function terminate()
@@ -127,7 +139,7 @@ end
 
 
 
-function run_main(main::Callable; run_main_everywhere::Bool=false)
+function run_main(main; run_main_everywhere::Bool=false)
     init()
     commstate.use_recv_loop = !(OPTIMIZE_SELF_COMMUNICATION && nprocs()==1)
     r = nothing
@@ -136,7 +148,7 @@ function run_main(main::Callable; run_main_everywhere::Bool=false)
             @async recv_loop()
         end
         if run_main_everywhere || myproc()==1
-            r = call(main)
+            r = main()
         end
         if commstate.use_recv_loop
             terminate()
@@ -153,88 +165,50 @@ function recv_loop()
     end
 end
 
-function run_task(item)
+function run_task(item::Item)
     if !commstate.stop_sending
-        # (f::Callable, args...) = item
-        @schedule call(item...)
+        @schedule item()
     end
+    nothing
 end
 
 
 
-# TODO: Support sending arbitrary expressions, not just function calls
-# TODO: Use a stagedfunction for this
-
-# function rexec(p::Integer, f::Callable, args...)
-#     item = tuple(f, args...)
-#     if OPTIMIZE_SELF_COMMUNICATION && p == myproc()
-#         run_task(item)
-#     else
-#         @schedule send_item(p, TAG, item)
-#     end
-# end
-rexec(f::Callable, p::Integer) = rexec(p, f)
-function rexec(p::Integer, f::Callable)
-    item = tuple(f)
+rexec(f, p::Int) = rexec(Item(f), p)
+function rexec(item::Item, p::Int)
     if OPTIMIZE_SELF_COMMUNICATION && p == myproc()
         run_task(item)
     else
         @schedule send_item(p, TAG, item)
     end
-end
-function rexec(p::Integer, f::Callable, arg1)
-    item = tuple(f, arg1)
-    if OPTIMIZE_SELF_COMMUNICATION && p == myproc()
-        run_task(item)
-    else
-        @schedule send_item(p, TAG, item)
-    end
-end
-function rexec(p::Integer, f::Callable, arg1, arg2)
-    item = tuple(f, arg1, arg2)
-    if OPTIMIZE_SELF_COMMUNICATION && p == myproc()
-        run_task(item)
-    else
-        @schedule send_item(p, TAG, item)
-    end
-end
-function rexec(p::Integer, f::Callable, arg1, arg2, arg3)
-    item = tuple(f, arg1, arg2, arg3)
-    if OPTIMIZE_SELF_COMMUNICATION && p == myproc()
-        run_task(item)
-    else
-        @schedule send_item(p, TAG, item)
-    end
-end
-function rexec(p::Integer, f::Callable, arg1, arg2, arg3, arg4, args...)
-    item = tuple(f, arg1, arg2, arg3, arg4, args...)
-    if OPTIMIZE_SELF_COMMUNICATION && p == myproc()
-        run_task(item)
-    else
-        @schedule send_item(p, TAG, item)
-    end
+    nothing
 end
 
-function _rexec_tree(item)
+function _rexec_tree(item::Item)
     pmin = 2*myproc()
     pmax = min(2*myproc()+1, nprocs())
     for p in pmin:pmax
-        rexec(p, _rexec_tree, item)
+        rexec(p) do
+            _rexec_tree(item)
+        end
     end
-    # (f::Callable, args...) = item
-    call(item...)
+    item()
+    nothing
 end
-function rexec_everywhere(f::Callable, args...)
-    item = tuple(f, args...)
-    rexec(1, _rexec_tree, item)
+rexec_everywhere(f) = rexec_everywhere(Item(f))
+function rexec_everywhere(item::Item)
+    rexec(1) do
+        _rexec_tree(item)
+    end
+    nothing
 end
 
 macro rexec(p, expr)
-    esc(Base.localize_vars(:(rexec($p, ()->$expr)), false))
+    :(rexec(()->$(esc(expr)), $(esc(p))))
 end
 
 macro rexec_everywhere(expr)
-    esc(Base.localize_vars(:(rexec_everywhere(()->$expr)), false))
+    :(rexec_everywhere(()->$(esc(expr))))
 end
 
 end

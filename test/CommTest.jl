@@ -10,12 +10,14 @@ function remote1(i, s, a)
     @test i == 1
     @test s == "a"
     @test a == [1.0]
-    rexec(nprocs(), remote2)
+    rexec(remote2, nprocs())
 end
 
 function remote2()
     @test myproc() == nprocs()
-    rexec(1, ()->remote3())
+    rexec(1) do
+        remote3()
+    end
 end
 
 function remote3()
@@ -24,8 +26,8 @@ function remote3()
 end
 
 function inc()
-    # rexec(1, () -> global COUNTER += 1)
-    rexec(1, inc1)
+    # rexec(() -> global COUNTER += 1, 1)
+    rexec(inc1, 1)
 end
 function inc1()
     global COUNTER += 1
@@ -37,26 +39,27 @@ end
 let
     @test myproc() == 1
     global DONE = false
-    rexec(mod1(2, nprocs()), remote1, 1, "a", [1.0])
-    while !DONE yield() end
-end
-
-let
-    @test myproc() == 1
-    global DONE = false
-    i=1
-    rexec(mod1(2, nprocs()), ()->(s="a"; remote1(i, s, [1.0])))
-    while !DONE yield() end
-end
-
-let
-    @test myproc() == 1
-    global DONE = false
-    i=1
     rexec(mod1(2, nprocs())) do
-        s="a"
-        remote1(i, s, [1.0])
+        remote1(1, "a", [1.0])
     end
+    while !DONE yield() end
+end
+
+let
+    @test myproc() == 1
+    global DONE = false
+    i=1
+    rexec(()->(s="a"; remote1(i, s, [1.0])), mod1(2, nprocs()))
+    while !DONE yield() end
+end
+
+let
+    @test myproc() == 1
+    global DONE = false
+    i=1
+    s="a"
+    f() = remote1(i, s, [1.0])
+    rexec(f, mod1(2, nprocs()))
     while !DONE yield() end
 end
 
