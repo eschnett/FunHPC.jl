@@ -7,8 +7,19 @@ julia:
   - nightly
 notifications:
   email: false
+sudo: false
+addons:
+  apt:
+    packages:
+      - gfortran
+      - libopenmpi-dev
+      - openmpi-bin
+before_install:
+  - if [[ $(uname) == Darwin ]]; then brew update; brew install openmpi; fi
+install:
+  - julia -e 'Pkg.add("Coverage")'
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("FunHPC"); Pkg.test("FunHPC"; coverage=true)'
 after_success:
-  - julia -e 'cd(Pkg.dir("FunHPC")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
+  - julia -e 'cd(Pkg.dir("FunHPC")); using Coverage; Codecov.submit(process_folder())'
