@@ -13,11 +13,12 @@ export rexec_everywhere, @rexec_everywhere
 typealias ProcID Int
 
 const OPTIMIZE_SELF_COMMUNICATION = true
+const USE_MPI_MANAGER = false
 
 
 
 type CommInfo
-    initialized::Bool
+    was_initialized::Bool
     comm::MPI.Comm
     rank::Int
     size::Int
@@ -27,27 +28,37 @@ end
 const comminfo = CommInfo()
 
 function init()
-    comminfo.initialized = MPI.Initialized()
-    if !comminfo.initialized
+    comminfo.was_initialized = MPI.Initialized()
+    if !comminfo.was_initialized
         MPI.Init()
     end
-    # comminfo.comm = MPI.Comm_dup(MPI.COMM_WORLD)
-    comminfo.comm = MPI.COMM_WORLD
+    comminfo.comm = MPI.Comm_dup(MPI.COMM_WORLD)
+    # comminfo.comm = MPI.COMM_WORLD
     comminfo.rank = MPI.Comm_rank(comminfo.comm)
     comminfo.size = MPI.Comm_size(comminfo.comm)
-    ## # Override some Base settings to describe our multi-process setup
-    ## LPROC.id = myproc()
-    ## PGRP.workers = collect(procs())
-    # This call returns only on the root process
-    comminfo.manager = MPI.start(MPI_TRANSPORT_ALL)
+    if USE_MPI_MANAGER
+        # This call returns only on the root process
+        @assert comminfo.comm == MPI.COMM_WORLD
+        comminfo.manager = MPI.start(MPI_TRANSPORT_ALL)
+    else
+        ## # Override some Base settings to describe our multi-process setup
+        ## LPROC.id = myproc()
+        ## PGRP.workers = collect(procs())
+    end
 end
 
 function finalize()
-    ## # Undo override above to prevent errors during shutdown
-    ## LPROC.id = 1
-    ## PGRP.workers = []
-    if comminfo.initialized && !MPI.Finalized()
-        @mpi_do comminfo.manager MPI.Finalize()
+    if USE_MPI_MANAGER
+        if !comminfo.was_initialized && !MPI.Finalized()
+            @mpi_do comminfo.manager MPI.Finalize()
+        end
+    else
+        ## # Undo override above to prevent errors during shutdown
+        ## LPROC.id = 1
+        ## PGRP.workers = []
+        if !comminfo.was_initialized && !MPI.Finalized()
+            MPI.Finalize()
+        end
     end
 end
 
@@ -58,10 +69,10 @@ myproc() = comminfo.rank+1
 
 
 type CommState
+    use_recv_loop::Bool
     stop_sending::Bool
     stop_receiving::Bool
-    use_recv_loop::Bool
-    CommState() = new(false, false)
+    CommState() = new()
 end
 const commstate = CommState()
 
@@ -139,12 +150,18 @@ end
 
 
 
+const main_running = Ref{Bool}(false)
 function run_main(main; run_main_everywhere::Bool=false)
+    @assert !main_running[]
+    main_running[] = true
     init()
+    @assert !USE_MPI_MANAGER
     commstate.use_recv_loop = !(OPTIMIZE_SELF_COMMUNICATION && nprocs()==1)
     r = nothing
     @sync begin
         if commstate.use_recv_loop
+            commstate.stop_sending = false
+            commstate.stop_receiving = false
             @async recv_loop()
         end
         if run_main_everywhere || myproc()==1
@@ -155,12 +172,14 @@ function run_main(main; run_main_everywhere::Bool=false)
         end
     end
     finalize()
+    @assert main_running[]
+    main_running[] = false
     r
 end
 
 function recv_loop()
     @assert commstate.use_recv_loop
-    while !STOP_RECEIVING
+    while !commstate.stop_receiving
         run_task(recv_item(0, TAG))
     end
 end
