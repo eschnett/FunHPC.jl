@@ -40,7 +40,7 @@ isjust(m::Maybe) = m.isjust
 isnothing(m::Maybe) = !isjust(m)
 
 maybe{T}(zero, f::Callable, m::Maybe{T}; R::Type=eltype(f)) =
-    isjust(m) ? call(f, m.value)::R : zero::R
+    isjust(m) ? f(m.value)::R : zero::R
 
 fromjust(m::Maybe) = (@assert isjust(m); m.value)
 frommaybe{T}(zero, m::Maybe{T}) = isjust(m) ? m.value : zero::T
@@ -59,7 +59,7 @@ end
 function mapMaybe{MT}(f::Callable, xs::Array{MT,1}; R::Type=eltype(f))
     rs = R[]
     for x in xs
-        maybe(rs, (r->push!(rs,call(R=R,f,r))), x)
+        maybe(rs, r->push!(rs, f(r)), x)
     end
     rs
 end
@@ -76,14 +76,14 @@ function =={T}(m1::Maybe{T}, m2::Maybe{T})
     fromjust(m1) == fromjust(m2)
 end
 
-function serialize{T}(s, m::Maybe{T})
+function serialize{T}(s::SerializationState, m::Maybe{T})
     Base.serialize_type(s, Maybe{T})
     write(s, m.isjust)
     if m.isjust
         write(s, fromjust(m))
     end
 end
-function deserialize{T}(s, ::Type{Maybe{T}})
+function deserialize{T}(s::SerializationState, ::Type{Maybe{T}})
     isjust = read(s, Bool)
     if isjust
         value = read(s, T)
@@ -93,7 +93,7 @@ function deserialize{T}(s, ::Type{Maybe{T}})
     end
 end
 
-length(m::Maybe) = int(isjust(m))
+length(m::Maybe) = Int(isjust(m))
 start(m::Maybe) = isnothing(m)
 next(m::Maybe, i) = fromjust(m), true
 done(m::Maybe, i) = i
@@ -101,17 +101,25 @@ isempty(m::Maybe) = isnothing(m)
 
 
 
-
-function freduce(op::Callable, zero, m::Maybe, ns::Maybe...; R::Type=eltype(op))
-    [@assert isjust(n) == isjust(m) for n in ns]
-    if isnothing(m) return zero::R end
-    @call R op(zero, fromjust(m), map(fromjust, ns)...)
+@generated function freduce(op::Callable, zero, m::Maybe, ns::Maybe...;
+        R::Type=eltype(op))
+    quote
+        tuple($([:(@assert isjust(ns[$i]) == isjust(m))
+            for i in 1:length(ns)]...))
+        if isnothing(m) return zero::R end
+        op(zero, fromjust(m),
+            $([:(fromjust(ns[$i])) for i in 1:length(ns)]...))::R
+    end
 end
 
-function fmap(f::Callable, m::Maybe, ns::Maybe...; R::Type=eltype(f))
-    [@assert isjust(n) == isjust(m) for n in ns]
-    if isnothing(m) return Maybe{R}() end
-    Maybe{R}(@call R f(fromjust(m), map(fromjust, ns)...))
+@generated function fmap(f::Callable, m::Maybe, ns::Maybe...; R::Type=eltype(f))
+    quote
+        tuple($([:(@assert isjust(ns[$i]) == isjust(m))
+            for i in 1:length(ns)]...))
+        if isnothing(m) return Maybe{R}() end
+        Maybe{R}(f(fromjust(m),
+            $([:(fromjust(ns[$i])) for i in 1:length(ns)]...))::R)
+    end
 end
 
 tycon{T,R}(::Type{Maybe{T}}, ::Type{R}) = Maybe{R}

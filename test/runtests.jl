@@ -10,6 +10,7 @@ run_main() do
     include("FoldableTest.jl")
     include("FunctorTest.jl")
     include("StencilFunctorTest.jl")
+    include("MaybesTest.jl")
     include("MonadTest.jl")
     include("MultiDictsTest.jl")
 
