@@ -11,7 +11,8 @@ fmap{FT}(f::Callable, xs::FT, yss...; R::Type=eltype(f)) =
 @generated function fmap{T,D}(f::Callable, xs::Array{T,D}, yss::Array...;
         R::Type=eltype(f))
     quote
-        [@assert size(ys) == size(xs) for ys in yss]
+        tuple($([:(@assert length(yss[$n]) == length(xs))
+            for n in 1:length(yss)]...))
         rs = similar(xs, R)
         @inbounds @simd for i in eachindex(xs)
             rs[i] = f(xs[i], $([:(yss[$n][i]) for n in 1:length(yss)]...))
@@ -35,9 +36,17 @@ function fmap{T}(f::Callable, xs::Set{T}; R::Type=eltype(f))
 end
 
 # Tuple
-function fmap(f::Callable, xs::Tuple, yss::Tuple...; R::Type=eltype(f))
-    [@assert length(ys) == length(xs) for ys in yss]
-    map(f, xs, yss...)::NTuple{length(xs), R}
+@generated function fmap(f::Callable, xs::Tuple, yss::Tuple...;
+        R::Type=eltype(f))
+    [@assert nfields(yss[n]) == nfields(xs) for n in 1:length(yss)]
+    quote
+        rs = tuple($([
+            quote
+                f(xs[$i], $([:(f(yss[$n][$i])) for n in 1:length(yss)]...))
+            end
+            for i in 1:nfields(xs)]...))
+        rs::NTuple{$(nfields(xs)), R}
+    end
 end
 
 end

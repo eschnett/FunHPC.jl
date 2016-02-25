@@ -11,7 +11,8 @@ freduce{Z,FT}(f::Callable, zero::Z, xs::FT, yss...; R::Type=eltype(f)) =
 @generated function freduce{Z,T,D}(f::Callable, zero::Z, xs::Array{T,D},
         yss::Array...; R::Type=eltype(f))
     quote
-        [@assert size(ys) == size(xs) for ys in yss]
+        tuple($([:(@assert length(yss[$n]) == length(xs))
+            for n in 1:length(yss)]...))
         r = zero
         @inbounds #=@simd=# for i in eachindex(xs)
             r = f(r, xs[i], $([:(yss[$n][i]) for n in 1:length(yss)]...))
@@ -33,7 +34,8 @@ end
 @generated function freduce{Z}(f::Callable, zero::Z, xs::Tuple, yss::Tuple...;
         R::Type=eltype(f))
     quote
-        [@assert length(ys) == length(xs) for ys in yss]
+        tuple($([:(@assert length(yss[$n]) == length(xs))
+            for n in 1:length(yss)]...))
         r = zero
         @inbounds #=@simd=# for i in eachindex(xs)
             r = f(r, xs[i], $([:(yss[$n][i]) for n in 1:length(yss)]...))
