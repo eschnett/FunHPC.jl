@@ -13,5 +13,6 @@ run_main() do
     include("MonadTest.jl")
     include("MultiDictsTest.jl")
 
+    include("CommTest.jl")
     include("GIDsTest.jl")
 end

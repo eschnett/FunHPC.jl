@@ -1,10 +1,7 @@
 module GIDsTest
 
-using Base.Test
-
 using Comm, GIDs
-
-
+using Base.Test
 
 function test()
     t = "hello"
@@ -17,17 +14,19 @@ function test()
     free(gid)
     sleep(1)
     @test !hasobj(gid)
-    
+
     gid = nullgid()
     @test isnull(gid)
     @test islocal(gid)
-    
+
     gid = makegid(t)
     @test gid.proc == 1
     @test islocal(gid)
     @test !isnull(gid)
     global TERMINATE = false
-    rexec(mod1(2, nprocs()), test2, gid)
+    rexec(mod1(2, nprocs())) do
+        test2(gid)
+    end
     while !TERMINATE yield() end
 end
 
@@ -36,7 +35,9 @@ function test2(gid::GID)
     @test islocal(gid) == (myproc()==1)
     @test !isnull(gid)
     free(gid)
-    rexec(1, test3, gid)
+    rexec(1) do
+        test3(gid)
+    end
 end
 
 function test3(gid::GID)
@@ -48,8 +49,6 @@ function test3(gid::GID)
     global TERMINATE = true
 end
 
-
-
-run_main(test)
+test()
 
 end
