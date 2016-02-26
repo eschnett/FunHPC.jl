@@ -1,8 +1,7 @@
-module RefsTest
+module FunRefsTest
 
+using Comm, GIDs, FunRefs
 using Base.Test
-
-using Comm, GIDs, Refs
 
 function main()
     test_basic(Any)
@@ -15,11 +14,13 @@ end
 # Test basic operations
 function test_basic(T::Type)
     i = 1
-    ri = Ref{T}(i)
-    @test get(ri) == i
-    rn = Ref{None}()
+    ri = FunRef{T}(i)
+    @test ri[] == i
+    rn = FunRef{Union{}}()
     global DONE = false
-    rexec(mod1(2, nprocs()), remote1, i, ri)
+    rexec(mod1(2, nprocs())) do
+        remote1(i, ri)
+    end
     while !DONE yield() end
 end
 
@@ -28,7 +29,7 @@ function test_remote(do_gc::Bool)
     # Use a nested function to ensure that ri is garbage collected
     function inner()
         i = 1
-        ri = ref(i)
+        ri = FunRef(i)
         maxcount = 1000
         global COUNT = 0
         manyrefs(i, ri, maxcount, do_gc)
@@ -46,46 +47,52 @@ end
 # Test future behaviour
 function test_future()
     i = 1
-    ri = ref(i)
+    ri = FunRef(i)
     @test isready(ri)
     @test islocal(ri)
-    @test get(ri) == i
-    ri = Ref{Int}()
+    @test ri[] == i
+    ri = FunRef{Int}()
     @test !isready(ri)
-    set!(ri, i)
+    ri[] = i
     @test isready(ri)
     @test islocal(ri)
-    @test get(ri) == i
-    r0 = Ref{Nothing}()
+    @test ri[] == i
+    r0 = FunRef{Void}()
     @test !isready(r0)
     global FUTURE_SET = false
     global FUTURE_DONE = false
-    rexec(mod1(2, nprocs()), future_continued, ri, r0)
+    rexec(mod1(2, nprocs())) do
+        future_continued(ri, r0)
+    end
     while !FUTURE_SET yield() end
-    set!(r0, nothing)
+    r0[] = nothing
     while !FUTURE_DONE yield() end
 end
 
 
 
-function remote1(i::Int, ri::Ref)
+function remote1(i::Int, ri::FunRef)
     @test getproc(ri) == 1
     @test islocal(ri) == (myproc()==1)
-    rexec(getproc(ri), remote2, i, ri)
+    rexec(getproc(ri)) do
+        remote2(i, ri)
+    end
 end
 
-function remote2(i::Int, ri::Ref)
+function remote2(i::Int, ri::FunRef)
     @test islocal(ri)
-    @test get(ri) == i
+    @test ri[] == i
     global DONE = true
 end
 
-function manyrefs(i::Int, ri::Ref, count::Int, do_gc::Bool)
+function manyrefs(i::Int, ri::FunRef, count::Int, do_gc::Bool)
     @assert count>0
     if do_gc gc() end
-    @test !islocal(ri) || get(ri) == i
+    @test !islocal(ri) || ri[] == i
     if count == 1
-        rexec(1, inc)
+        rexec(1) do
+            inc()
+        end
         return
     end
     proc1 = rand(1:nprocs())
@@ -97,11 +104,23 @@ function manyrefs(i::Int, ri::Ref, count::Int, do_gc::Bool)
     count2 = max(counta, countb) - count1
     count3 = count - (count1 + count2)
     @assert count1 + count2 + count3 == count
-    if count1>0 rexec(proc1, manyrefs, i, ri, count1, do_gc) end
-    if count2>0 rexec(proc2, manyrefs, i, ri, count2, do_gc) end
+    if count1>0
+        rexec(proc1) do
+            manyrefs(i, ri, count1, do_gc)
+        end
+    end
+    if count2>0
+        rexec(proc2) do
+            manyrefs(i, ri, count2, do_gc)
+        end
+    end
     j = i+1
-    rj = ref(j)
-    if count3>0 rexec(proc3, manyrefs, j, rj, count3, do_gc) end
+    rj = FunRef(j)
+    if count3>0
+        rexec(proc3) do
+            manyrefs(j, rj, count3, do_gc)
+        end
+    end
 end
 
 function inc()
@@ -112,10 +131,12 @@ function check_refs()
     gc()
     sleep(1)
     @test isempty(GIDs.mgr())
-    rexec(1, inc)
+    rexec(1) do
+        inc()
+    end
 end
 
-function future_continued(ri::Ref, r0::Ref)
+function future_continued(ri::FunRef, r0::FunRef)
     @test isready(ri)
     @test islocal(ri) == (nprocs()==1)
     rj = typeof(ri)()
@@ -124,9 +145,13 @@ function future_continued(ri::Ref, r0::Ref)
     @test isready(rj)
     @test islocal(rj) == (nprocs()==1)
     @test !isready(r0)
-    rexec(1, future_set)
+    rexec(1) do
+        future_set()
+    end
     wait(r0)
-    rexec(1, future_done)
+    rexec(1) do
+        future_done()
+    end
 end
 
 function future_set()
@@ -139,6 +164,6 @@ end
 
 
 
-run_main(main)
+main()
 
 end

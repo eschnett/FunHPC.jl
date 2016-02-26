@@ -5,7 +5,6 @@ unshift!(LOAD_PATH, "../src")
 
 using Comm
 run_main() do
-
     include("FunsTest.jl")
     include("FoldableTest.jl")
     include("FunctorTest.jl")
@@ -16,4 +15,5 @@ run_main() do
 
     include("CommTest.jl")
     include("GIDsTest.jl")
+    include("FunRefsTest.jl")
 end

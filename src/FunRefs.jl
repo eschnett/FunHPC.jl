@@ -1,49 +1,46 @@
-module Refs
+module FunRefs
 
 using Comm, Foldable, Functor, Funs, GIDs, Monad
 
-import Base.show
-import Base.eltype, Base.get, Base.==, Base.wait
-import Base.serialize, Base.deserialize
-import Base.length, Base.start, Base.next, Base.done, Base.isempty
-import Base.getindex
+import Base: show
+import Base: eltype, getindex, setindex!, ==, isready, wait
+import Base: serialize, deserialize
+import Base: length, start, next, done, isempty
 
-import GIDs.islocal
+import GIDs: islocal
 
-export Ref, ref
-export set!, set_from_ref!                               # reset!
-export eltype, get, getproc, islocal, isready, get, wait # ==
-export length, start, next, done, isempty
-export getindex
+export FunRef
+export getproc
+export set!, set_from_ref!   # reset!
 
 
 
-immutable RefRemoteReady end
-immutable RefRemoteUnready end
+immutable FunRefRemoteReady end
+immutable FunRefRemoteUnready end
 
 # TODO: Replace ready,cond by Maybe{Condition}
 
-type Ref{T}
+type FunRef{T}
     ready::Bool
     gid::GID                    # if ready
     obj::T                      # cache, if ready and local
     cond::Condition             # while not ready
-    
+
     # Create unready
-    function Ref()
+    function FunRef()
         ref = new(false)
         ref.cond = Condition()
         ref
     end
     # Create from local object
-    function Ref(obj)
+    function FunRef(obj::T)
         # gid = makegid(obj)
         gid = nullgid()
         ref = new(true, gid, obj)
         ref
     end
     # Create from ready remote reference
-    function Ref(::RefRemoteReady, gid::GID, prevgid::GID)
+    function FunRef(::FunRefRemoteReady, gid::GID, prevgid::GID)
         @assert !isnull(gid) && !isnull(prevgid)
         ref = new(true, gid)
         finalizer(ref, finalize)
@@ -52,7 +49,7 @@ type Ref{T}
         ref
     end
     # Create from unready remote reference
-    function Ref(::RefRemoteUnready, prevgid::GID)
+    function FunRef(::FunRefRemoteUnready, prevgid::GID)
         @assert !isnull(prevgid)
         ref = new(false)
         ref.cond = Condition()
@@ -61,11 +58,10 @@ type Ref{T}
     end
 end
 
-ref{T}(obj::T) = Ref{T}(obj)
+FunRef{T}(obj::T) = FunRef{T}(obj)
 
-# Do not free GIDs during garbage collection. Instead, put them on a
-# to-free list, and have a worker thread periodically free the GIDs on
-# this list.
+# Do not free GIDs during garbage collection. Instead, put them on a to-free
+# list, and have a worker thread periodically free the GIDs on this list.
 global GIDLIST = GID[]
 function mark_gid(gid::GID)
     global GIDLIST::Array{GID,1}
@@ -75,7 +71,7 @@ function free_gids()
     global GIDLIST::Array{GID,1}
     gidlist = GID[]
     while true
-        sleep(0.1)
+        yield()
         gidlist, GIDLIST = GIDLIST, gidlist
         map(free, gidlist)
         empty!(gidlist)
@@ -83,7 +79,7 @@ function free_gids()
 end
 @schedule free_gids()
 
-function finalize(ref::Ref)
+function finalize(ref::FunRef)
     # if !isready(ref) return end
     # if isnull(ref.gid) return end
     @assert isready(ref)
@@ -91,39 +87,45 @@ function finalize(ref::Ref)
     # free(ref.gid)
     mark_gid(ref.gid)
 end
-function ensure_have_gid(ref::Ref)
+function ensure_have_gid(ref::FunRef)
     if !isnull(ref.gid) return end
     ref.gid = makegid(ref.obj)
     finalizer(ref, finalize)
 end
-function take_ownership(ref::Ref, prevgid::GID)
+function take_ownership(ref::FunRef, prevgid::GID)
     @assert !isnull(ref.gid) && !isnull(prevgid)
     gid = ref.gid
     refgid = makegid(ref)
-    rexec(gid.proc, take_ownership2, gid, prevgid, refgid)
+    rexec(gid.proc) do
+        take_ownership2(gid, prevgid, refgid)
+    end
 end
 function take_ownership2(gid::GID, prevgid::GID, refgid::GID)
     alloc(gid)
     free(prevgid)
     free(refgid)
 end
-function wait_for_ref(ref::Ref, prevgid::GID)
+function wait_for_ref(ref::FunRef, prevgid::GID)
     @assert !isnull(prevgid)
     refgid = makegid(ref)
-    rexec(prevgid.proc, wait_for_ref2, prevgid, refgid)
+    rexec(prevgid.proc) do
+        wait_for_ref2(prevgid, refgid)
+    end
 end
 function wait_for_ref2(prevgid::GID, refgid::GID)
-    prev = getobj(prevgid)::Ref
+    prev = getobj(prevgid)::FunRef
     wait(prev)
     ensure_have_gid(prev)
-    rexec(refgid.proc, wait_for_ref3, refgid, prev.gid, prevgid)
+    rexec(refgid.proc) do
+        wait_for_ref3(refgid, prev.gid, prevgid)
+    end
 end
 function wait_for_ref3(refgid::GID, gid::GID, prevgid::GID)
-    ref = getobj(refgid)::Ref
+    ref = getobj(refgid)::FunRef
     set!(ref, gid, prevgid)
 end
 
-function set!{T}(ref::Ref{T}, obj)
+function setindex!{T}(ref::FunRef{T}, obj)
     @assert !isready(ref)
     # gid = makegid(obj)
     gid = nullgid()
@@ -132,7 +134,7 @@ function set!{T}(ref::Ref{T}, obj)
     ref.ready = true
     notify(ref.cond)
 end
-function set!{T}(ref::Ref{T}, gid::GID, prevgid::GID)
+function set!{T}(ref::FunRef{T}, gid::GID, prevgid::GID)
     @assert !isready(ref)
     @assert !isnull(gid) && !isnull(prevgid)
     ref.gid = gid
@@ -143,9 +145,9 @@ function set!{T}(ref::Ref{T}, gid::GID, prevgid::GID)
     take_ownership(ref, prevgid)
 end
 # This could have a more generic signature
-function set_from_ref!{T}(ref::Ref{T}, other::Ref{T})
+function set_from_ref!{T}(ref::FunRef{T}, other::FunRef{T})
     if islocal(other)
-        set!(ref, get(other))
+        ref[] = other[]
     else
         wait(other)
         othergid = makegid(other)
@@ -153,7 +155,7 @@ function set_from_ref!{T}(ref::Ref{T}, other::Ref{T})
     end
 end
 # Don't know how to unset ref.obj
-# function reset!(ref::Ref)
+# function reset!(ref::FunRef)
 #     @assert isready(ref)
 #     if islocal(ref.gid) ref.obj = nothing end
 #     free(ref.gid)
@@ -161,7 +163,7 @@ end
 #     ref.cond = Condition()
 # end
 
-function show(io::IO, ref::Ref)
+function show(io::IO, ref::FunRef)
     if !isready(ref)
         print(io, "$(typeof(ref))($(ref.ready))")
     elseif !islocal(ref)
@@ -171,43 +173,43 @@ function show(io::IO, ref::Ref)
     end
 end
 
-eltype{T}(ref::Ref{T}) = T
+eltype{T}(ref::FunRef{T}) = T
 
-function isready(ref::Ref)
+function isready(ref::FunRef)
     ref.ready
 end
-function wait(ref::Ref)
+function wait(ref::FunRef)
     if isready(ref) return end
     # Note: There must be no interruption between the "isready" and
     # the "wait"; in particular, there can be no I/O here.
     wait(ref.cond)
 end
 
-function getproc(ref::Ref)
+function getproc(ref::FunRef)
     wait(ref)
     if isnull(ref.gid) return Comm.myproc() end
     ref.gid.proc
 end
-function islocal(ref::Ref)
+function islocal(ref::FunRef)
     # getproc(ref) == Comm.myproc()
     wait(ref)
     islocal(ref.gid)
 end
-function get{T}(ref::Ref{T})
+function getindex{T}(ref::FunRef{T})
     wait(ref)
     @assert islocal(ref)
     ref.obj::T
 end
 
-# function =={T}(ref1::Ref{T}, ref2::Ref{T})
+# function =={T}(ref1::FunRef{T}, ref2::FunRef{T})
 #     wait(ref1, ref2)
 #     ref1.gid == ref2.gid
 # end
 
 
 
-function serialize{T}(s, ref::Ref{T})
-    Base.serialize_type(s, Ref{T})
+function serialize{T}(s::SerializationState, ref::FunRef{T})
+    Base.serialize_type(s, FunRef{T})
     write(s, ref.ready)
     if ref.ready
         ensure_have_gid(ref)
@@ -219,29 +221,24 @@ function serialize{T}(s, ref::Ref{T})
         write(s, refgid)
     end
 end
-function deserialize{T}(s, ::Type{Ref{T}})
+function deserialize{T}(s::SerializationState, ::Type{FunRef{T}})
     ready = read(s, Bool)
     if ready
         gid = read(s, GID)
         prevgid = read(s, GID)
-        Ref{T}(RefRemoteReady(), gid, prevgid)
+        FunRef{T}(FunRefRemoteReady(), gid, prevgid)
     else
         prevgid = read(s, GID)
-        Ref{T}(RefRemoteUnready(), prevgid)
+        FunRef{T}(FunRefRemoteUnready(), prevgid)
     end
 end
 
 
 
-length(ref::Ref) = 1
-start(ref::Ref) = false
-next(ref::Ref, i) = get(ref), true
-done(ref::Ref, i) = i
-isempty(ref::Ref) = false
-
-function getindex{T}(ref::Ref{T}, i::Integer)
-    if i!=1 throw(BoundsError()) end
-    get(ref)::T
-end
+length(ref::FunRef) = 1
+start(ref::FunRef) = false
+next(ref::FunRef, i) = ref[], true
+done(ref::FunRef, i) = i
+isempty(ref::FunRef) = false
 
 end
