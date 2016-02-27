@@ -32,8 +32,8 @@ function init()
     if !comminfo.was_initialized
         MPI.Init()
     end
-    comminfo.comm = MPI.Comm_dup(MPI.COMM_WORLD)
-    # comminfo.comm = MPI.COMM_WORLD
+    # comminfo.comm = MPI.Comm_dup(MPI.COMM_WORLD)
+    comminfo.comm = MPI.COMM_WORLD
     comminfo.rank = MPI.Comm_rank(comminfo.comm)
     comminfo.size = MPI.Comm_size(comminfo.comm)
     if USE_MPI_MANAGER
