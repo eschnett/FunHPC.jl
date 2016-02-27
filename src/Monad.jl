@@ -6,17 +6,18 @@ export tycon, valtype
 export munit, mjoin, mbind, mzero, mplus
 
 # valtype(tycon(MT, T)) == T
-tycon(::Type, ::Type) = error("tycon not specialized")
-valtype(::Type) = error("valtype not specialized")
+tycon{FT}(::Type{FT}, ::Type) = error("tycon not specialized for type $FT")
+valtype{FT}(::Type{FT}) = error("valtype not specialized for type $FT")
 
 # Monad
-munit(::Type, x) = error("munit not specialized")
-mjoin(xss) = error("mjoin not specialized")
-mbind(xs, f::Callable; R::Type=Any) = error("mbind not specialized")
+munit{FT}(::Type{FT}, x) = error("munit not specialized for type $FT")
+mjoin{FFT}(xss::FFT) = error("mjoin not specialized for type $FFT")
+mbind{FT}(f::Callable, xs::FT; R::Type=Any) =
+    error("mbind not specialized for type $FT")
 
 # MonadPlus
-mzero(::Type) = error("mzero not specialized")
-mplus(xs, yss...) = error("mplus not specialized")
+mzero{FT}(::Type{FT}) = error("mzero not specialized for type $FT")
+mplus{FT}(xs::FT, yss...) = error("mplus not specialized for type $FT")
 
 
 
@@ -53,7 +54,7 @@ function mjoin{AT}(xss::Array{AT,2})
     end
     rs::Array{T,2}
 end
-mbind{T,D}(xs::Array{T,D}, f::Callable; R::Type=eltype(f)) =
+mbind{T,D}(f::Callable, xs::Array{T,D}; R::Type=eltype(f)) =
     mjoin(fmap(R=R, f, xs))
 
 mzero{T,D}(::Type{Array{T,D}}) = Array(T, ntuple(i->0, D))
@@ -68,7 +69,7 @@ valtype{T}(::Type{Fun{T}}) = T
 
 munit{T}(::Type{Fun{T}}, x) = Fun{T}(a->x)
 mjoin{T}(f::Fun{Fun{T}}) = Fun{T}(x->f(x)(x))
-mbind{T}(f::Fun{T}, g::Callable; R::Type=eltype(g)) = mjoin(fmap(R=R, g, f))
+mbind{T}(g::Callable, f::Fun{T}; R::Type=eltype(g)) = mjoin(fmap(R=R, g, f))
 
 
 
@@ -85,7 +86,7 @@ function mjoin{T}(xss::Set{Set{T}})
     end
     rs::Set{T}
 end
-mbind{T}(xs::Set{T}, f::Callable; R::Type=eltype(f)) = mjoin(fmap(R=R, f, xs))
+mbind{T}(f::Callable, xs::Set{T}; R::Type=eltype(f)) = mjoin(fmap(R=R, f, xs))
 
 mzero{T}(::Type{Set{T}}) = Set{T}()
 function mplus{T}(xs::Set{T}, yss::Set{T}...)

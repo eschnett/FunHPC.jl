@@ -1,24 +1,21 @@
 module Par
 
-using Comm, GIDs, Foldable, Functor, Funs, Monad, Refs
+using Comm, GIDs, Foldable, Functor, FunRefs, Funs, Monad
 
-import Base.eltype
-import Foldable.freduce
-import Functor.fmap
-import Monad.tycon, Monad.valtype, Monad.munit, Monad.mjoin, Monad.mbind
+import Base: eltype
+import Foldable: freduce
+import Functor: fmap
+import Monad: tycon, valtype, munit, mjoin, mbind
 
-export par, @par
-export rpar, rcall, @rpar, @rcall
+export par   # @par
+export rpar, rcall   # @rpar, @rcall
 export make_local, get_remote
 export unwrap
-export remote, @remote
-export freduce
-export fmap
-export tycon, valtype, munit, mjoin, mbind
+export remote   # @remote
 
 
 
-resc(expr) = esc(Base.localize_vars(expr, false))
+# resc(expr) = esc(Base.localize_vars(expr, false))
 # # Return an iterable consisting of a Callable and arguments,
 # # corresponding to the content of args of a call Expr
 # function make_callargs(expr)
@@ -32,178 +29,210 @@ resc(expr) = esc(Base.localize_vars(expr, false))
 
 
 
-function par(f::Callable, args...; R::Type=eltype(f))
-    r = Ref{R}()
-    @schedule set!(r, call(f, args...))
-    r::Ref{R}
+function par(f::Callable; R::Type=eltype(f))
+    r = FunRef{R}()
+    @schedule r[] = f()
+    r::FunRef{R}
 end
 
-macro par(args...)
-    if length(args) == 1
-        (expr,) = args
-        resc(:(par(()->$expr)))
-    elseif length(args) == 2
-        (R, expr) = args
-        resc(:(par(R=$R, ()->$expr)))
-    else
-        error("Expected: @par [<type>] <expr>)")
+# macro par(args...)
+#     if length(args) == 1
+#         (expr,) = args
+#         resc(:(par(()->$expr)))
+#     elseif length(args) == 2
+#         (R, expr) = args
+#         resc(:(par(R=$R, ()->$expr)))
+#     else
+#         error("Expected: @par [<type>] <expr>)")
+#     end
+# end
+
+
+immutable Item
+    item::Any
+end
+
+function rpar(f::Callable, ref::FunRef; R::Type=eltype(f))
+    r = FunRef{R}()
+    rgid = makegid(r)
+    @schedule rexec(getproc(ref)) do
+        rpar2(rgid, f)
+    end
+    r::FunRef{R}
+end
+rpar(f::Callable, p::Integer; R::Type=eltype(f)) = rpar(R=R, f, Int(p))
+function rpar(f::Callable, p::Int; R::Type=eltype(f))
+    r = FunRef{R}()
+    rgid = makegid(r)
+    rexec(p) do
+        rpar2(rgid, f)
+    end
+    r::FunRef{R}
+end
+function rpar2(rgid::GID, f::Callable)
+    res = f()
+    rexec(rgid.proc) do
+        rpar3(rgid, Item(res))
     end
 end
-
-
-
-function rpar(ref::Ref, f::Callable, args...; R::Type=eltype(f))
-    r = Ref{R}()
-    rgid = makegid(r)
-    @schedule rexec(getproc(ref), rpar2, rgid, f, args)
-    r::Ref{R}
-end
-function rpar(p::Integer, f::Callable, args...; R::Type=eltype(f))
-    r = Ref{R}()
-    rgid = makegid(r)
-    rexec(p, rpar2, rgid, f, args)
-    r::Ref{R}
-end
-function rpar2(rgid::GID, f::Callable, args)
-    rexec(rgid.proc, rpar3, rgid, call(f, args...))
-end
-function rpar3(rgid::GID, res::Any)
+function rpar3(rgid::GID, res::Item)
     r = getobj(rgid)
     free(rgid)
-    set!(r, res)
+    r[] = res.item
 end
 
-# TODO: Introduce LocalRef (aka Future) that does not obtain a GID for
-# the item
+# TODO: Introduce LocalFunRef (aka Future) that does not obtain a GID for the item
 # TODO: Obtain GID lazily, only when needed?
-function rcall(p::Union(Integer,Ref), f::Callable, args...; R::Type=eltype(f))
-    get(rpar(R=R, p, f, args...))::R
+function rcall(f::Callable, p::Union{Integer,FunRef}; R::Type=eltype(f))
+    rpar(R=R, f, p)[]::R
 end
 
-macro rpar(args...)
-    if length(args) == 2
-        (p, expr) = args
-        resc(:(rpar($p, ()->$expr)))
-    elseif length(args) == 3
-        (R, p, expr) = args
-        resc(:(rpar(R=$R, $p, ()->$expr)))
-    else
-        error("Expected: @rpar [<type>] <proc> <expr>)")
+# macro rpar(args...)
+#     if length(args) == 2
+#         (p, expr) = args
+#         resc(:(rpar(()->$expr, $p)))
+#     elseif length(args) == 3
+#         (R, p, expr) = args
+#         resc(:(rpar(R=$R, ()->$expr, $p)))
+#     else
+#         error("Expected: @rpar [<type>] <proc> <expr>)")
+#     end
+# end
+
+# macro rcall(args...)
+#     if length(args) == 2
+#         (p, expr) = args
+#         resc(:(rcall(()->$expr, $p)))
+#     elseif length(args) == 3
+#         (R, p, expr) = args
+#         resc(:(rcall(R=$R, ()->$expr, $p)))
+#     else
+#         error("Expected: @rcall [<type>] <proc> <expr>)")
+#     end
+# end
+
+
+
+function make_local{R}(ref::FunRef{R})
+    rpar(R=R, ref) do
+        ref[]
+    end::FunRef{R}
+end
+function get_remote{R}(ref::FunRef{R})
+    make_local(ref)[]::R
+end
+
+
+
+function unwrap(ref::FunRef{Any})
+    r = FunRef{Any}()
+    rgid = makegid(r)
+    @schedule rexec(getproc(ref)) do
+        unwrap2(rgid, ref)
+    end
+    r::FunRef{Any}
+end
+function unwrap2(rgid::GID, ref::FunRef{Any})
+    ref2 = ref[]::FunRef{Any}
+    wait(ref2)
+    rexec(rgid.proc) do
+        unwrap3(rgid, ref2)
     end
 end
-
-macro rcall(args...)
-    if length(args) == 2
-        (p, expr) = args
-        resc(:(rcall($p, ()->$expr)))
-    elseif length(args) == 3
-        (R, p, expr) = args
-        resc(:(rcall(R=$R, $p, ()->$expr)))
-    else
-        error("Expected: @rcall [<type>] <proc> <expr>)")
+function unwrap{R}(ref::FunRef{FunRef{R}})
+    r = FunRef{R}()
+    rgid = makegid(r)
+    @schedule rexec(getproc(ref)) do
+        unwrap2(rgid, ref)
+    end
+    r::FunRef{R}
+end
+function unwrap2{R}(rgid::GID, ref::FunRef{FunRef{R}})
+    ref2 = ref[]::FunRef{R}
+    wait(ref2)
+    rexec(rgid.proc) do
+        unwrap3(rgid, ref2)
     end
 end
-
-
-
-function make_local{R}(ref::Ref{R})
-    rpar(R=R, ref, get, ref)::Ref{R}
-end
-function get_remote{R}(ref::Ref{R})
-    get(make_local(ref))::R
-end
-
-
-
-function unwrap(ref::Ref{Any})
-    r = Ref{Any}()
-    rgid = makegid(r)
-    @schedule rexec(getproc(ref), unwrap2, rgid, ref)
-    r::Ref{Any}
-end
-function unwrap2(rgid::GID, ref::Ref{Any})
-    ref2 = get(ref)::Ref{Any}
-    wait(ref2)
-    rexec(rgid.proc, unwrap3, rgid, ref2)
-end
-function unwrap{R}(ref::Ref{Ref{R}})
-    r = Ref{R}()
-    rgid = makegid(r)
-    @schedule rexec(getproc(ref), unwrap2, rgid, ref)
-    r::Ref{R}
-end
-function unwrap2{R}(rgid::GID, ref::Ref{Ref{R}})
-    ref2 = get(ref)::Ref{R}
-    wait(ref2)
-    rexec(rgid.proc, unwrap3, rgid, ref2)
-end
-function unwrap3{R}(rgid::GID, ref2::Ref{R})
-    r = getobj(rgid)::Ref{R}
+function unwrap3{R}(rgid::GID, ref2::FunRef{R})
+    r = getobj(rgid)::FunRef{R}
     free(rgid)
     set_from_ref!(r, ref2)
 end
 
 
 
-function remote(ref::Ref, f::Callable, args...; R::Type=eltype(f))
-    r = Ref{R}()
+function remote(f::Callable, ref::FunRef; R::Type=eltype(f))
+    r = FunRef{R}()
     rgid = makegid(r)
-    @schedule rexec(getproc(ref), remote2, R, rgid, f, args)
-    r::Ref{R}
+    @schedule rexec(getproc(ref)) do
+        remote2(R, rgid, f)
+    end
+    r::FunRef{R}
 end
-function remote(p::Integer, f::Callable, args...; R::Type=eltype(f))
-    r = Ref{R}()
+remote(f::Callable, p::Integer; R::Type=eltype(f)) = remote(f, Int(p), R=R)
+function remote(f::Callable, p::Int; R::Type=eltype(f))
+    r = FunRef{R}()
     rgid = makegid(r)
-    rexec(p, remote2, R, rgid, f, args)
-    r::Ref{R}
+    rexec(p) do
+        remote2(R, rgid, f)
+    end
+    r::FunRef{R}
 end
-function remote2(R::Type, rgid::GID, f::Callable, args)
-    ref = Ref{R}(call(f, args...))
-    rexec(rgid.proc, remote3, rgid, ref)
+function remote2(R::Type, rgid::GID, f::Callable)
+    ref = FunRef{R}(f())
+    rexec(rgid.proc) do
+        remote3(rgid, Item(ref))
+    end
 end
-function remote3(rgid::GID, ref::Ref)
+function remote3(rgid::GID, ref::Item)
     r = getobj(rgid)
     free(rgid)
-    set_from_ref!(r, ref)
+    set_from_ref!(r, ref.item::FunRef)
 end
 
-macro remote(args...)
-    if length(args) == 2
-        (p, expr) = args
-        resc(:(remote($p, ()->$expr)))
-    elseif length(args) == 3
-        (R, p, expr) = args
-        resc(:(remote(R=$R, $p, ()->$expr)))
-    else
-        error("Expected: @remote [<type>] <proc> <expr>)")
+# macro remote(args...)
+#     if length(args) == 2
+#         (p, expr) = args
+#         resc(:(remote(()->$expr, $p)))
+#     elseif length(args) == 3
+#         (R, p, expr) = args
+#         resc(:(remote(R=$R, ()->$expr, $p)))
+#     else
+#         error("Expected: @remote [<type>] <proc> <expr>)")
+#     end
+# end
+
+
+
+# FunRef is Foldable, Functor, Applicative, and Monad
+
+@generated function freduce(op::Callable, zero, ref::FunRef, refs::FunRef...;
+        R::Type=eltype(op))
+    quote
+        rcall(R=R, ref) do
+            op(zero, ref[],
+                $([:(get_remote(refs[$i])) for i in 1:length(refs)]...))
+        end
     end
 end
 
-
-
-# Ref is Foldable, Functor, Applicative, and Monad
-
-function freduce(op::Callable, zero, ref::Ref; R::Type=eltype(op))
-    @rcall R ref call(op, zero, get(ref))
-end
-function freduce(op::Callable, zero, ref::Ref, ref2::Ref, refs::Ref...;
-                 R::Type=eltype(op))
-    @rcall R ref call(op, zero,
-                      get(ref), get_remote(ref2), map(get_remote, refs)...)
+@generated function fmap(f::Callable, ref::FunRef, refs::FunRef...;
+        R::Type=eltype(f))
+    quote
+        remote(R=R, ref) do
+            f(ref[], $([:(get_remote(refs[$i])) for i in 1:length(refs)]...))
+        end
+    end
 end
 
-function fmap(f::Callable, ref::Ref; R::Type=eltype(f))
-    @remote R ref call(f, get(ref))
-end
-function fmap(f::Callable, ref::Ref, ref2::Ref, refs::Ref...; R::Type=eltype(f))
-    @remote R ref call(f, get(ref), get_remote(ref2), map(get_remote, refs)...)
-end
+tycon{T,R}(::Type{FunRef{T}}, ::Type{R}) = FunRef{R}
+valtype{T}(::Type{FunRef{T}}) = T
 
-tycon{T,R}(::Type{Ref{T}}, ::Type{R}) = Ref{R}
-valtype{T}(::Type{Ref{T}}) = T
-
-munit{T}(::Type{Ref{T}}, x) = Ref{T}(x)
-mjoin{T}(xss::Ref{Ref{T}}) = unwrap(xss)
-mbind{T}(xs::Ref{T}, f::Callable; R::Type=eltype(f)) = mjoin(fmap(R=R, f, xs))
+munit{T}(::Type{FunRef{T}}, x) = FunRef{T}(x)
+mjoin{T}(xss::FunRef{FunRef{T}}) = unwrap(xss)
+function mbind{T}(f::Callable, xs::FunRef{T}; R::Type=eltype(f))
+    mjoin(fmap(R=R, f, xs))
+end
 
 end

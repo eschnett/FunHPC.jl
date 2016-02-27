@@ -10,7 +10,7 @@ import Base: length, start, next, done, isempty
 import GIDs: islocal
 
 export FunRef
-export getproc
+export getproc, islocal
 export set!, set_from_ref!   # reset!
 
 
@@ -240,5 +240,7 @@ start(ref::FunRef) = false
 next(ref::FunRef, i) = ref[], true
 done(ref::FunRef, i) = i
 isempty(ref::FunRef) = false
+getindex(ref::FunRef, i::Integer) = (@assert i==1; ref[])
+setindex!(ref::FunRef, i::Integer, val) = (@assert i==1; ref[]=val)
 
 end

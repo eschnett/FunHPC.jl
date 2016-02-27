@@ -16,4 +16,5 @@ run_main() do
     include("CommTest.jl")
     include("GIDsTest.jl")
     include("FunRefsTest.jl")
+    include("ParTest.jl")
 end

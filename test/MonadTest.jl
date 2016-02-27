@@ -20,10 +20,10 @@ let
     @test isa(j, Array{Int,0})
     @test j == fill(42)
 
-    b = mbind(fill(1), x::Int->fill(x+1), R=Array{Int,0})
+    b = mbind(x::Int->fill(x+1), fill(1), R=Array{Int,0})
     @test b == fill(2)
 
-    b = mbind(fill(1), Fun{Array{Int,0}}(x::Int->fill(x+1)))
+    b = mbind(Fun{Array{Int,0}}(x::Int->fill(x+1)), fill(1))
     @test b == fill(2)
 end
 
@@ -51,10 +51,10 @@ let
     j2 = mjoin(a)
     @test j2 == [1,2,3,4]
 
-    b = mbind([1,2], x::Int->Int[x,x+1], R=Array{Int,1})
+    b = mbind(x::Int->Int[x,x+1], [1,2], R=Array{Int,1})
     @test b == [1,2,2,3]
 
-    b = mbind([1,2], Fun{Array{Int,1}}(x::Int->Int[x,x+1]))
+    b = mbind(Fun{Array{Int,1}}(x::Int->Int[x,x+1]), [1,2])
     @test b == [1,2,2,3]
 
     z = mzero(Array{Int,1})
@@ -93,7 +93,7 @@ let
     j2 = mjoin(a)
     @test j2 == [[11 12; 13 14] [31 32; 33 34]; [21 22; 23 24] [41 42; 43 44]]
 
-    b = mbind([1 2; 3 4], x::Int->Int[x x+1; 2*x 2*x+1], R=Array{Int,2})
+    b = mbind(x::Int->Int[x x+1; 2*x 2*x+1], [1 2; 3 4], R=Array{Int,2})
     @test b == [[1 2; 2 3] [2 3; 4 5]; [3 4; 6 7] [4 5; 8 9]]
 
     z = mzero(Array{Int,2})
@@ -125,13 +125,13 @@ let
 
     inc = Fun{Int}(x->x+1)
     mul = Fun{Fun{Float64}}(x->Fun{Float64}(y->float(x*y)))
-    b = mbind(inc, mul)
+    b = mbind(mul, inc)
     @test isa(b, Fun{Float64})
     @test fcall(b,1) == 2.0
     @test fcall(b,2) == 6.0
     @test fcall(b,3) == 12.0
 
-    b = mbind(inc, x->Fun{Float64}(y->float(x*y)), R=Fun{Float64})
+    b = mbind(x->Fun{Float64}(y->float(x*y)), inc, R=Fun{Float64})
     @test isa(b, Fun{Float64})
     @test fcall(b,1) == 2.0
     @test fcall(b,2) == 6.0
@@ -160,10 +160,10 @@ let
     j2 = mjoin(s)
     @test j2 == Set([1,2,3,4])
 
-    b = mbind(Set([1,2]), x::Int->Set(Int[x,x+1]), R=Set{Int})
+    b = mbind(x::Int->Set(Int[x,x+1]), Set([1,2]), R=Set{Int})
     @test b == Set([1,2,2,3])
 
-    b = mbind(Set([1,2]), Fun{Set{Int}}(x::Int->Set(Int[x,x+1])))
+    b = mbind(Fun{Set{Int}}(x::Int->Set(Int[x,x+1])), Set([1,2]))
     @test b == Set([1,2,2,3])
 
     z = mzero(Set{Int})

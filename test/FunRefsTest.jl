@@ -3,14 +3,6 @@ module FunRefsTest
 using Comm, GIDs, FunRefs
 using Base.Test
 
-function main()
-    test_basic(Any)
-    test_basic(Int)
-    test_remote(true)
-    test_remote(false)
-    test_future()
-end
-
 # Test basic operations
 function test_basic(T::Type)
     i = 1
@@ -163,6 +155,14 @@ function future_done()
 end
 
 
+
+function main()
+    test_basic(Any)
+    test_basic(Int)
+    test_remote(true)
+    test_remote(false)
+    test_future()
+end
 
 main()
 

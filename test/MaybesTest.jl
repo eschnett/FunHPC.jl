@@ -86,10 +86,10 @@ function test_monad()
     j = mjoin(uu)
     @test j == just(42)
 
-    b = mbind(just(1), x::Int->just(x+1.0), R=Maybe{Float64})
+    b = mbind(x::Int->just(x+1.0), just(1), R=Maybe{Float64})
     @test b == just(2.0)
 
-    b = mbind(just(1), Fun{Maybe{Float64}}(x->just(x+1.0)))
+    b = mbind(Fun{Maybe{Float64}}(x->just(x+1.0)), just(1))
     @test b == just(2.0)
 
     z = mzero(Maybe{Int})

@@ -127,7 +127,7 @@ valtype{T}(::Type{Maybe{T}}) = T
 
 munit{T}(::Type{Maybe{T}}, x) = Maybe{T}(x)
 mjoin{T}(xss::Maybe{Maybe{T}}) = frommaybe(Maybe{T}(), xss)
-mbind{T}(xs::Maybe{T}, f::Callable; R::Type=eltype(f)) = mjoin(fmap(R=R, f, xs))
+mbind{T}(f::Callable, xs::Maybe{T}; R::Type=eltype(f)) = mjoin(fmap(R=R, f, xs))
 
 mzero{T}(::Type{Maybe{T}}) = Maybe{T}()
 mplus{T}(xs::Maybe{T}) = xs
