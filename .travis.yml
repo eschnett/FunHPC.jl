@@ -21,7 +21,8 @@ install:
 before_script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 script:
-  - julia -e 'Pkg.clone(pwd()); Pkg.build("FunHPC"); Pkg.test("FunHPC", coverage=true)'
-  - mpirun -np 2 julia -e 'Pkg.test("FunHPC", coverage=true)'
+  - julia -e 'Pkg.clone(pwd()); Pkg.build("FunHPC")'
+  - julia --check-bounds=yes -e 'Pkg.test("FunHPC", coverage=true)'
+  - mpirun -np 2 julia --check-bounds=yes -e 'Pkg.test("FunHPC", coverage=true)'
 after_success:
   - julia -e 'cd(Pkg.dir("FunHPC")); using Coverage; Codecov.submit(process_folder())'
