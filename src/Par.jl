@@ -2,7 +2,7 @@ module Par
 
 using Comm, GIDs, Foldable, Functor, FunRefs, Funs, Monad
 
-import Base: eltype
+import Base: eltype, remote
 import Foldable: freduce
 import Functor: fmap
 import Monad: tycon, valtype, munit, mjoin, mbind
