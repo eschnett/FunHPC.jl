@@ -64,9 +64,9 @@ end
 
 
 function remote1(i::Int, ri::FunRef)
-    @test getproc(ri) == 1
+    @test proc(ri) == 1
     @test islocal(ri) == (Comm.myproc()==1)
-    rexec(getproc(ri)) do
+    rexec(proc(ri)) do
         remote2(i, ri)
     end
 end

@@ -56,7 +56,7 @@ end
 function rpar(f::Callable, ref::FunRef; R::Type=eltype(f))
     r = FunRef{R}()
     rgid = makegid(r)
-    @schedule rexec(getproc(ref)) do
+    @schedule rexec(proc(ref)) do
         rpar2(rgid, f)
     end
     r::FunRef{R}
@@ -129,7 +129,7 @@ end
 function unwrap(ref::FunRef{Any})
     r = FunRef{Any}()
     rgid = makegid(r)
-    @schedule rexec(getproc(ref)) do
+    @schedule rexec(proc(ref)) do
         unwrap2(rgid, ref)
     end
     r::FunRef{Any}
@@ -144,7 +144,7 @@ end
 function unwrap{R}(ref::FunRef{FunRef{R}})
     r = FunRef{R}()
     rgid = makegid(r)
-    @schedule rexec(getproc(ref)) do
+    @schedule rexec(proc(ref)) do
         unwrap2(rgid, ref)
     end
     r::FunRef{R}
@@ -167,7 +167,7 @@ end
 function remote(f::Callable, ref::FunRef; R::Type=eltype(f))
     r = FunRef{R}()
     rgid = makegid(r)
-    @schedule rexec(getproc(ref)) do
+    @schedule rexec(proc(ref)) do
         remote2(R, rgid, f)
     end
     r::FunRef{R}

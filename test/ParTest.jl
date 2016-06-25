@@ -43,7 +43,7 @@ function local_fun_untyped()
     @test (Comm.nprocs()==1) == islocal(r6)
 
     # get
-    v6 = rcall(getproc(r6)) do
+    v6 = rcall(proc(r6)) do
         r6[]
     end
     @test v6 == 7
@@ -65,14 +65,14 @@ function local_fun_untyped()
     @test isa(rr, FunRef{Any})
     r = unwrap(rr)
     @test isa(r, FunRef{Any})
-    crr = rcall(getproc(rr)) do
+    crr = rcall(proc(rr)) do
         r = rr[]
-        rcall(getproc(r)) do
+        rcall(proc(r)) do
             r[] == 7
         end
     end
     @test crr
-    cr = rcall(getproc(r)) do
+    cr = rcall(proc(r)) do
         r[] == 7
     end
     @test cr
@@ -109,7 +109,7 @@ function local_fun_typed()
     @test (Comm.nprocs()==1) == islocal(r6)
 
     # get
-    v6 = rcall(R=Int, getproc(r6)) do
+    v6 = rcall(R=Int, proc(r6)) do
         r6[]
     end
     @test v6 == 7
@@ -131,14 +131,14 @@ function local_fun_typed()
     @test isa(rr, FunRef{FunRef{Int}})
     r = unwrap(rr)
     @test isa(r, FunRef{Int})
-    crr = rcall(R=Bool, getproc(rr)) do
+    crr = rcall(R=Bool, proc(rr)) do
         r = rr[]
-        rcall(R=Bool, getproc(r)) do
+        rcall(R=Bool, proc(r)) do
             r[] == 7
         end
     end
     @test crr
-    cr = rcall(R=Bool, getproc(r)) do
+    cr = rcall(R=Bool, proc(r)) do
         r[] == 7
     end
     @test cr
@@ -167,7 +167,7 @@ end
 #    @test (Comm.nprocs()==1) == islocal(r6)
 #
 #    # get_cmp
-#    v6 = @rcall getproc(r6) r6[]
+#    v6 = @rcall proc(r6) r6[]
 #    @test v6 == 7
 #
 #    # make_local
@@ -186,9 +186,9 @@ end
 #    r = unwrap(rr)
 #    @test isa(r, FunRef{Any})
 #    vrr = rr[]
-#    vvrr = @rcall getproc(r6) vrr[]
+#    vvrr = @rcall proc(r6) vrr[]
 #    @test vvrr == 7
-#    vr = @rcall getproc(r) r[]
+#    vr = @rcall proc(r) r[]
 #    @test vr == 7
 #end
 
@@ -215,7 +215,7 @@ end
 #    @test (Comm.nprocs()==1) == islocal(r6)
 #
 #    # get_cmp
-#    v6 = @rcall Int getproc(r6) r6[]
+#    v6 = @rcall Int proc(r6) r6[]
 #    @test v6 == 7
 #
 #    # make_local
@@ -234,9 +234,9 @@ end
 #    r = unwrap(rr)
 #    @test isa(r, FunRef{Int})
 #    vrr = rr[]
-#    vvrr = @rcall Int getproc(r6) vrr[]
+#    vvrr = @rcall Int proc(r6) vrr[]
 #    @test vvrr == 7
-#    vr = @rcall Int getproc(r) r[]
+#    vr = @rcall Int proc(r) r[]
 #    @test vr == 7
 #end
 
@@ -431,7 +431,7 @@ function test_functor()
     r1 = FunRef(2)
     r2 = FunRef(3)
     r3 = remote(()->4, R=Int, mod1(2,Comm.nprocs()))
-    @test getproc(r3) == mod1(2,Comm.nprocs())
+    @test proc(r3) == mod1(2,Comm.nprocs())
     fr1 = fmap(R=Int, x->2x, r1)
     fr2 = fmap(R=Int, (x,y)->2x+y, r1, r2)
     fr3 = fmap(R=Int, (x,y)->2x+y, r1, r3)
@@ -439,7 +439,7 @@ function test_functor()
     @test islocal(fr1)
     @test islocal(fr2)
     @test islocal(fr3)
-    @test getproc(fr4) == mod1(2,Comm.nprocs())
+    @test proc(fr4) == mod1(2,Comm.nprocs())
     @test fr1[] == 4
     @test fr2[] == 7
     @test fr3[] == 8

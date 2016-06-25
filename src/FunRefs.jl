@@ -10,7 +10,7 @@ import Base: length, start, next, done, isempty
 import GIDs: islocal
 
 export FunRef
-export getproc, islocal
+export proc, islocal
 export set!, set_from_ref!   # reset!
 
 
@@ -188,13 +188,13 @@ function wait(ref::FunRef)
     # end
 end
 
-function getproc(ref::FunRef)
+function proc(ref::FunRef)
     wait(ref)
     if isnull(ref.gid) return Comm.myproc() end
     ref.gid.proc
 end
 function islocal(ref::FunRef)
-    # getproc(ref) == Comm.myproc()
+    # proc(ref) == Comm.myproc()
     wait(ref)
     islocal(ref.gid)
 end
