@@ -223,8 +223,9 @@ end
 #         R::Type=eltype(f))
 #     quote
 #         remote(R=R, ref) do
-#             # TODO: Parallelize get_local calls via make_local
-#             f(ref[], $([:(get_local(refs[$i])) for i in 1:length(refs)]...))
+#             lrefs = tuple($([:(make_local(refs[$i]))
+#                              for i in 1:length(refs)]...))
+#             f(ref[], $([:(lrefs[$i][]) for i in 1:length(refs)]...))
 #         end
 #     end
 # end
