@@ -468,11 +468,8 @@ end
 
 
 function main()
-    "ParTest.main.0"
     local_fun_untyped()
-    "ParTest.main.1"
     local_fun_typed()
-    "ParTest.main.2"
     #local_mac_untyped()
     #local_mac_typed()
     local_unwrap_untyped()
