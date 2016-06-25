@@ -179,8 +179,12 @@ end
 
 function recv_loop()
     @assert commstate.use_recv_loop
-    while !commstate.stop_receiving
-        run_task(recv_item(0, TAG))
+    try
+        while !commstate.stop_receiving
+            run_task(recv_item(0, TAG))
+        end
+    catch ex
+        info(ex)
     end
 end
 
