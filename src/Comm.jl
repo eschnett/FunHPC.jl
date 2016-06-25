@@ -5,14 +5,14 @@ using Funs, MPI
 ## import Base.LPROC, Base.PGRP
 
 export ProcID, procid
-export myproc, procs, nprocs
+# export myproc, procs, nprocs
 export run_main
-export rexec, @rexec
-export rexec_everywhere, @rexec_everywhere
+export rexec   # @rexec
+export rexec_everywhere   # @rexec_everywhere
 
 typealias ProcID Int
 
-const OPTIMIZE_SELF_COMMUNICATION = true
+const OPTIMIZE_SELF_COMMUNICATION = false   #TODO true
 const USE_MPI_MANAGER = false
 
 
@@ -63,8 +63,8 @@ function finalize()
 end
 
 myproc() = comminfo.rank+1
-# nprocs() = comminfo.size
-# procs() = 1:nprocs()
+nprocs() = comminfo.size
+procs() = 1:nprocs()
 
 
 
@@ -88,10 +88,10 @@ end
 # TODO: Use TestSome
 function send_item(p::Int, t::Int, item::Item)
     @assert commstate.use_recv_loop
-    req = MPI.isend(item, p-1, t, comminfo.com)
+    req = MPI.isend(item, p-1, t, comminfo.comm)
     while t==META_TAG || !commstate.stop_sending
         flag, status = MPI.Test!(req)
-        if flag return end
+        flag && return
         yield()
     end
     # MPI.cancel(req)
@@ -102,8 +102,8 @@ function recv_item(p::Int, t::Int)
     @assert commstate.use_recv_loop
     while t==META_TAG || !commstate.stop_receiving
         flag, item, status =
-            MPI.irecv(p==0 ? MPI.ANY_SOURCE : p-1, t, comminfo.com)
-        if flag return item::Item end
+            MPI.irecv(p==0 ? MPI.ANY_SOURCE : p-1, t, comminfo.comm)
+        flag && return item::Item
         yield()
     end
     Item(nothing)
@@ -126,7 +126,7 @@ function terminate()
     commstate.stop_sending = true
     # Send termination message to children
     @sync for c in cmin:cmax
-        @async send_item(c, META_TAG, nothing)
+        @async send_item(c, META_TAG, Item(nothing))
     end
     # Wait for termination confirmation from children
     @sync for c in cmin:cmax
@@ -134,7 +134,7 @@ function terminate()
     end
     # Send termination confirmation to parent
     @sync for p in pmin:pmax
-        @async send_item(p, META_TAG, nothing)
+        @async send_item(p, META_TAG, Item(nothing))
     end
     # Stage 2: Stop receiving
     # Wait for second termination message from parent
@@ -144,7 +144,7 @@ function terminate()
     commstate.stop_receiving = true
     # Send second termination message to children
     @sync for c in cmin:cmax
-        @async send_item(c, META_TAG, nothing)
+        @async send_item(c, META_TAG, Item(nothing))
     end
 end
 
@@ -222,12 +222,12 @@ function rexec_everywhere(item::Item)
     nothing
 end
 
-macro rexec(p, expr)
-    :(rexec(()->$(esc(expr)), $(esc(p))))
-end
-
-macro rexec_everywhere(expr)
-    :(rexec_everywhere(()->$(esc(expr))))
-end
+# macro rexec(p, expr)
+#     :(rexec(()->$(esc(expr)), $(esc(p))))
+# end
+# 
+# macro rexec_everywhere(expr)
+#     :(rexec_everywhere(()->$(esc(expr))))
+# end
 
 end

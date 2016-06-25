@@ -183,6 +183,9 @@ function wait(ref::FunRef)
     # Note: There must be no interruption between the "isready" and
     # the "wait"; in particular, there can be no I/O here.
     wait(ref.cond)
+    # while !isready(ref)
+    #     sleep(0.01)
+    # end
 end
 
 function getproc(ref::FunRef)
@@ -208,27 +211,27 @@ end
 
 
 
-function serialize{T}(s::SerializationState, ref::FunRef{T})
+function serialize{T}(s::AbstractSerializer, ref::FunRef{T})
     Base.serialize_type(s, FunRef{T})
-    write(s, ref.ready)
+    write(s.io, ref.ready)
     if ref.ready
         ensure_have_gid(ref)
-        write(s, ref.gid)
+        write(s.io, ref.gid)
         refgid = makegid(ref)
-        write(s, refgid)
+        write(s.io, refgid)
      else
         refgid = makegid(ref)
-        write(s, refgid)
+        write(s.io, refgid)
     end
 end
-function deserialize{T}(s::SerializationState, ::Type{FunRef{T}})
-    ready = read(s, Bool)
+function deserialize{T}(s::AbstractSerializer, ::Type{FunRef{T}})
+    ready = read(s.io, Bool)
     if ready
-        gid = read(s, GID)
-        prevgid = read(s, GID)
+        gid = read(s.io, GID)
+        prevgid = read(s.io, GID)
         FunRef{T}(FunRefRemoteReady(), gid, prevgid)
     else
-        prevgid = read(s, GID)
+        prevgid = read(s.io, GID)
         FunRef{T}(FunRefRemoteUnready(), prevgid)
     end
 end

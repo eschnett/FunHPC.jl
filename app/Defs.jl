@@ -4,7 +4,7 @@ using Comm
 
 # Global definitions, aka parameter file
 
-const run_type = :benchmark     # :debug, :benchmark, :production
+const run_type = :debug     # :debug, :benchmark, :production
 
 const ncells_per_grid = 10
 
@@ -32,7 +32,7 @@ else
     @assert false
 end
 
-ncells() = (rho * ncells_per_grid * nprocs())::Int
+ncells() = (rho * ncells_per_grid * Comm.nprocs())::Int
 dx() = ((xmax - xmin) / ncells())::Float64
 dt() = (cfl * dx())::Float64
 

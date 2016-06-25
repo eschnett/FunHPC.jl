@@ -4,6 +4,7 @@ module Grids
 
 using Foldable, Functor, StencilFunctor
 using Cells, Defs, Norms
+using Comm
 
 import Base.show
 import Norms.norm
@@ -17,6 +18,7 @@ immutable Grid
     imax::Int
     cells::Vector{Cell}
     function Grid(imin, imax, cells)
+        # println("Running on process $(Comm.comminfo.rank)")
         @assert imax>imin
         new(imin, imax, cells)
     end

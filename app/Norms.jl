@@ -4,7 +4,7 @@ module Norms
 
 using Base.Test
 
-import Base.+
+import Base.+, Base.norm
 
 export Norm
 export norm, +

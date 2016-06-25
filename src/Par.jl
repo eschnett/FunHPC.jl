@@ -9,7 +9,7 @@ import Monad: tycon, valtype, munit, mjoin, mbind
 
 export par   # @par
 export rpar, rcall   # @rpar, @rcall
-export make_local, get_remote
+export make_local, get_local
 export unwrap
 export remote   # @remote
 
@@ -48,6 +48,7 @@ end
 # end
 
 
+
 immutable Item
     item::Any
 end
@@ -81,7 +82,8 @@ function rpar3(rgid::GID, res::Item)
     r[] = res.item
 end
 
-# TODO: Introduce LocalFunRef (aka Future) that does not obtain a GID for the item
+# TODO: Introduce LocalFunRef (aka Future) that does not obtain a GID
+# for the item
 # TODO: Obtain GID lazily, only when needed?
 function rcall(f::Callable, p::Union{Integer,FunRef}; R::Type=eltype(f))
     rpar(R=R, f, p)[]::R
@@ -118,7 +120,7 @@ function make_local{R}(ref::FunRef{R})
         ref[]
     end::FunRef{R}
 end
-function get_remote{R}(ref::FunRef{R})
+function get_local{R}(ref::FunRef{R})
     make_local(ref)[]::R
 end
 
@@ -211,18 +213,26 @@ end
         R::Type=eltype(op))
     quote
         rcall(R=R, ref) do
-            op(zero, ref[],
-                $([:(get_remote(refs[$i])) for i in 1:length(refs)]...))
+            lrefs = ntuple(i->make_local(refs[i]), length(refs))
+            op(zero, ref[], $([:(lrefs[$i][]) for i in 1:length(refs)]...))
         end
     end
 end
 
-@generated function fmap(f::Callable, ref::FunRef, refs::FunRef...;
-        R::Type=eltype(f))
-    quote
-        remote(R=R, ref) do
-            f(ref[], $([:(get_remote(refs[$i])) for i in 1:length(refs)]...))
-        end
+# @generated function fmap(f::Callable, ref::FunRef, refs::FunRef...;
+#         R::Type=eltype(f))
+#     quote
+#         remote(R=R, ref) do
+#             # TODO: Parallelize get_local calls via make_local
+#             f(ref[], $([:(get_local(refs[$i])) for i in 1:length(refs)]...))
+#         end
+#     end
+# end
+
+function fmap(f::Callable, ref::FunRef, refs::FunRef...; R::Type=eltype(f))
+    remote(R=R, ref) do
+        lrefs = ntuple(i->make_local(refs[i]), length(refs))
+        f(ref[], ntuple(i->lrefs[i][], length(refs))...)
     end
 end
 

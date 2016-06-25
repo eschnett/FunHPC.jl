@@ -3,13 +3,6 @@ module MaybesTest
 using Funs, Maybes
 using Base.Test
 
-function main()
-    test_basic()
-    test_foldable()
-    test_functor()
-    test_monad()
-end
-
 function test_basic()
     m0 = Maybe{Int}()
     m1 = Maybe{Int}(42)
@@ -104,6 +97,11 @@ function test_monad()
     @test p3 == Set([1,2,3,4,5,6])
 end
 
-main()
+function main()
+    test_basic()
+    test_foldable()
+    test_functor()
+    test_monad()
+end
 
 end

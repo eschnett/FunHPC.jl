@@ -76,17 +76,17 @@ function =={T}(m1::Maybe{T}, m2::Maybe{T})
     fromjust(m1) == fromjust(m2)
 end
 
-function serialize{T}(s::SerializationState, m::Maybe{T})
+function serialize{T}(s::AbstractSerializer, m::Maybe{T})
     Base.serialize_type(s, Maybe{T})
-    write(s, m.isjust)
+    write(s.io, m.isjust)
     if m.isjust
-        write(s, fromjust(m))
+        write(s.io, fromjust(m))
     end
 end
-function deserialize{T}(s::SerializationState, ::Type{Maybe{T}})
-    isjust = read(s, Bool)
+function deserialize{T}(s::AbstractSerializer, ::Type{Maybe{T}})
+    isjust = read(s.io, Bool)
     if isjust
-        value = read(s, T)
+        value = read(s.io, T)
         Maybe{T}(value)
     else
         Maybe{T}()

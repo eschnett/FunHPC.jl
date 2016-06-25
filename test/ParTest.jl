@@ -10,10 +10,6 @@ function inc(i::Integer)
     i+1
 end
 
-function get_cmp(ref::FunRef, i::Integer)
-    ref[] == i
-end
-
 
 
 function local_fun_untyped()
@@ -26,7 +22,7 @@ function local_fun_untyped()
     @test r1[] == 2
 
     # rpar
-    r3 = rpar(mod1(2, nprocs())) do
+    r3 = rpar(mod1(2, Comm.nprocs())) do
         inc(3)
     end
     @test isa(r3, FunRef{Any})
@@ -34,17 +30,17 @@ function local_fun_untyped()
     @test r3[] == 4
 
     # rcall
-    v4 = rcall(mod1(2, nprocs())) do
+    v4 = rcall(mod1(2, Comm.nprocs())) do
         inc(4)
     end
     @test v4 == 5
 
     # remote
-    r6 = remote(mod1(2, nprocs())) do
+    r6 = remote(mod1(2, Comm.nprocs())) do
         inc(6)
     end
     @test isa(r6, FunRef{Any})
-    @test (nprocs()==1) == islocal(r6)
+    @test (Comm.nprocs()==1) == islocal(r6)
 
     # get
     v6 = rcall(getproc(r6)) do
@@ -58,23 +54,26 @@ function local_fun_untyped()
     @test islocal(r7)
     @test r7[] == 7
 
-    # get_remote
-    v7 = get_remote(r7)
+    # get_local
+    v7 = get_local(r7)
     @test v7 == 7
 
     # unwrap
-    rr = rpar(mod1(2, nprocs())) do
+    rr = rpar(mod1(2, Comm.nprocs())) do
         identity(r6)
     end
     @test isa(rr, FunRef{Any})
     r = unwrap(rr)
     @test isa(r, FunRef{Any})
-    crr = rcall(getproc(r6)) do
-        get_cmp(rr[], 7)
+    crr = rcall(getproc(rr)) do
+        r = rr[]
+        rcall(getproc(r)) do
+            r[] == 7
+        end
     end
     @test crr
-    cr = rcall(getproc(r6)) do
-        get_cmp(r, 7)
+    cr = rcall(getproc(r)) do
+        r[] == 7
     end
     @test cr
 end
@@ -89,7 +88,7 @@ function local_fun_typed()
     @test r1[] == 2
 
     # rpar
-    r3 = rpar(R=Int, mod1(2, nprocs())) do
+    r3 = rpar(R=Int, mod1(2, Comm.nprocs())) do
         inc(3)
     end
     @test isa(r3, FunRef{Int})
@@ -97,17 +96,17 @@ function local_fun_typed()
     @test r3[] == 4
 
     # rcall
-    v4 = rcall(R=Int, mod1(2, nprocs())) do
+    v4 = rcall(R=Int, mod1(2, Comm.nprocs())) do
         inc(4)
     end
     @test v4 == 5
 
     # remote
-    r6 = remote(R=Int, mod1(2, nprocs())) do
+    r6 = remote(R=Int, mod1(2, Comm.nprocs())) do
         inc(6)
     end
     @test isa(r6, FunRef{Int})
-    @test (nprocs()==1) == islocal(r6)
+    @test (Comm.nprocs()==1) == islocal(r6)
 
     # get
     v6 = rcall(R=Int, getproc(r6)) do
@@ -121,23 +120,26 @@ function local_fun_typed()
     @test islocal(r7)
     @test r7[] == 7
 
-    # get_remote
-    v7 = get_remote(r7)
+    # get_local
+    v7 = get_local(r7)
     @test v7 == 7
 
     # unwrap
-    rr = rpar(R=FunRef{Int}, mod1(3, nprocs())) do
+    rr = rpar(R=FunRef{Int}, mod1(3, Comm.nprocs())) do
         identity(r6)
     end
     @test isa(rr, FunRef{FunRef{Int}})
     r = unwrap(rr)
     @test isa(r, FunRef{Int})
-    crr = rcall(R=Bool, getproc(r6)) do
-        get_cmp(rr[], 7)
+    crr = rcall(R=Bool, getproc(rr)) do
+        r = rr[]
+        rcall(R=Bool, getproc(r)) do
+            r[] == 7
+        end
     end
     @test crr
-    cr = rcall(R=Bool, getproc(r6)) do
-        get_cmp(r, 7)
+    cr = rcall(R=Bool, getproc(r)) do
+        r[] == 7
     end
     @test cr
 end
@@ -150,19 +152,19 @@ end
 #    @test r1[] == 2
 #
 #    # rpar
-#    r3 = @rpar mod1(2, nprocs()) inc(3)
+#    r3 = @rpar mod1(2, Comm.nprocs()) inc(3)
 #    @test isa(r3, FunRef{Any})
 #    @test islocal(r3)
 #    @test r3[] == 4
 #
 #    # rcall
-#    v4 = @rcall mod1(2, nprocs()) inc(4)
+#    v4 = @rcall mod1(2, Comm.nprocs()) inc(4)
 #    @test v4 == 5
 #
 #    # remote
-#    r6 = @remote mod1(2, nprocs()) inc(6)
+#    r6 = @remote mod1(2, Comm.nprocs()) inc(6)
 #    @test isa(r6, FunRef{Any})
-#    @test (nprocs()==1) == islocal(r6)
+#    @test (Comm.nprocs()==1) == islocal(r6)
 #
 #    # get_cmp
 #    v6 = @rcall getproc(r6) r6[]
@@ -174,12 +176,12 @@ end
 #    @test islocal(r7)
 #    @test r7[] == 7
 #
-#    # get_remote
-#    v7 = get_remote(r7)
+#    # get_local
+#    v7 = get_local(r7)
 #    @test v7 == 7
 #
 #    # unwrap
-#    rr = @rpar mod1(3, nprocs()) r6
+#    rr = @rpar mod1(3, Comm.nprocs()) r6
 #    @test isa(rr, FunRef{Any})
 #    r = unwrap(rr)
 #    @test isa(r, FunRef{Any})
@@ -198,19 +200,19 @@ end
 #    @test r1[] == 2
 #
 #    # rpar
-#    r3 = @rpar Int mod1(2, nprocs()) inc(3)
+#    r3 = @rpar Int mod1(2, Comm.nprocs()) inc(3)
 #    @test isa(r3, FunRef{Int})
 #    @test islocal(r3)
 #    @test r3[] == 4
 #
 #    # rcall
-#    v4 = @rcall Int mod1(2, nprocs()) inc(4)
+#    v4 = @rcall Int mod1(2, Comm.nprocs()) inc(4)
 #    @test v4 == 5
 #
 #    # remote
-#    r6 = @remote Int mod1(2, nprocs()) inc(6)
+#    r6 = @remote Int mod1(2, Comm.nprocs()) inc(6)
 #    @test isa(r6, FunRef{Int})
-#    @test (nprocs()==1) == islocal(r6)
+#    @test (Comm.nprocs()==1) == islocal(r6)
 #
 #    # get_cmp
 #    v6 = @rcall Int getproc(r6) r6[]
@@ -222,12 +224,12 @@ end
 #    @test islocal(r7)
 #    @test r7[] == 7
 #
-#    # get_remote
-#    v7 = get_remote(r7)
+#    # get_local
+#    v7 = get_local(r7)
 #    @test v7 == 7
 #
 #    # unwrap
-#    rr = @rpar FunRef{Int} mod1(3, nprocs()) r6
+#    rr = @rpar FunRef{Int} mod1(3, Comm.nprocs()) r6
 #    @test isa(rr, FunRef{FunRef{Int}})
 #    r = unwrap(rr)
 #    @test isa(r, FunRef{Int})
@@ -241,8 +243,8 @@ end
 
 
 function local_unwrap_untyped()
-    p1 = mod1(2, nprocs())
-    p2 = mod1(3, nprocs())
+    p1 = mod1(2, Comm.nprocs())
+    p2 = mod1(3, Comm.nprocs())
     # Try creating and readying the refs in all possible orders. These are all
     # permutations of the five steps, with the constraint that :creatN must
     # occur before :readyN, and :unwrap after :creat2.
@@ -313,13 +315,13 @@ function local_unwrap_untyped()
                 @test isready(ru) == ruready
             end
             if r1ready
-                @test get_remote(r1) == 8
+                @test get_local(r1) == 8
             end
             if r1ready && r2ready
-                @test get_remote(get_remote(r2)) == 8
+                @test get_local(get_local(r2)) == 8
             end
             if ruready
-                @test get_remote(ru) == 8
+                @test get_local(ru) == 8
             end
         end
         @assert r1ready && r2ready && ruready
@@ -327,8 +329,8 @@ function local_unwrap_untyped()
 end
 
 function local_unwrap_typed()
-    p1 = mod1(2, nprocs())
-    p2 = mod1(3, nprocs())
+    p1 = mod1(2, Comm.nprocs())
+    p2 = mod1(3, Comm.nprocs())
     # Try creating and readying the refs in all possible orders. These are all
     # permutations of the five steps, with the constraint that :creatN must
     # occur before :readyN, and :unwrap after :creat2.
@@ -399,13 +401,13 @@ function local_unwrap_typed()
                 @test isready(ru) == ruready
             end
             if r1ready
-                @test get_remote(r1) == 8
+                @test get_local(r1) == 8
             end
             if r1ready && r2ready
-                @test get_remote(get_remote(r2)) == 8
+                @test get_local(get_local(r2)) == 8
             end
             if ruready
-                @test get_remote(ru) == 8
+                @test get_local(ru) == 8
             end
         end
         @assert r1ready && r2ready && ruready
@@ -420,7 +422,7 @@ function test_foldable()
     @test freduce(+, 0, r1) == 2
     @test freduce(+, 0, r1, r2) == 5
 
-    r3 = remote(()->4, mod1(2,nprocs()))
+    r3 = remote(()->4, mod1(2,Comm.nprocs()))
     @test freduce(+, 0, r3) == 4
     @test freduce(+, 0, r3, r1) == 6
 end
@@ -428,20 +430,20 @@ end
 function test_functor()
     r1 = FunRef(2)
     r2 = FunRef(3)
-    r3 = remote(()->4, R=Int, mod1(2,nprocs()))
-    @test getproc(r3) == mod1(2,nprocs())
-    fr1 = fmap(R=Int, x->2*x, r1)
-    fr2 = fmap(R=Int, (x,y)->2*x+y, r1, r2)
-    fr3 = fmap(R=Int, (x,y)->2*x+y, r1, r3)
-    fr4 = fmap(R=Int, (x,y)->2*x+y, r3, r1)
+    r3 = remote(()->4, R=Int, mod1(2,Comm.nprocs()))
+    @test getproc(r3) == mod1(2,Comm.nprocs())
+    fr1 = fmap(R=Int, x->2x, r1)
+    fr2 = fmap(R=Int, (x,y)->2x+y, r1, r2)
+    fr3 = fmap(R=Int, (x,y)->2x+y, r1, r3)
+    fr4 = fmap(R=Int, (x,y)->2x+y, r3, r1)
     @test islocal(fr1)
     @test islocal(fr2)
     @test islocal(fr3)
-    @test getproc(fr4) == mod1(2,nprocs())
+    @test getproc(fr4) == mod1(2,Comm.nprocs())
     @test fr1[] == 4
     @test fr2[] == 7
     @test fr3[] == 8
-    @test get_remote(fr4) == 10
+    @test get_local(fr4) == 10
 end
 
 function test_monad()
@@ -466,8 +468,11 @@ end
 
 
 function main()
+    "ParTest.main.0"
     local_fun_untyped()
+    "ParTest.main.1"
     local_fun_typed()
+    "ParTest.main.2"
     #local_mac_untyped()
     #local_mac_typed()
     local_unwrap_untyped()
@@ -476,7 +481,5 @@ function main()
     test_functor()
     test_monad()
 end
-
-main()
 
 end

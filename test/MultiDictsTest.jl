@@ -32,9 +32,11 @@ function test{K,V}(::Type{K}, ::Type{V})
     @test isempty(d)
 end
 
-test(Char, Int)
-test(Char, Any)
-test(Any, Int)
-test(Any, Any)
+function main()
+    test(Char, Int)
+    test(Char, Any)
+    test(Any, Int)
+    test(Any, Any)
+end
 
 end

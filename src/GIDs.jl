@@ -29,13 +29,13 @@ function isnull(gid::GID)
     return gid.proc==0
 end
 function makegid(obj::Any)
-    proc = myproc()
+    proc = Comm.myproc()
     id = object_id(obj)::ObjID
     mgr()[id] = obj
     GID(proc, id)
 end
 function islocal(gid::GID)
-    isnull(gid) || gid.proc == myproc()
+    isnull(gid) || gid.proc == Comm.myproc()
 end
 function hasobj(gid::GID)
     @assert islocal(gid) && !isnull(gid)
@@ -56,7 +56,9 @@ end
 function free(gid::GID)
     @assert !isnull(gid)
     if islocal(gid) return free(gid.id) end
-    rexec(gid.proc, free, gid.id)
+    rexec(gid.proc) do
+        free(gid.id)
+    end
     nothing
 end
 

@@ -24,7 +24,7 @@ function test()
     @test islocal(gid)
     @test !isnull(gid)
     global TERMINATE = false
-    rexec(mod1(2, nprocs())) do
+    rexec(mod1(2, Comm.nprocs())) do
         test2(gid)
     end
     while !TERMINATE yield() end
@@ -32,7 +32,7 @@ end
 
 function test2(gid::GID)
     @test gid.proc == 1
-    @test islocal(gid) == (myproc()==1)
+    @test islocal(gid) == (Comm.myproc()==1)
     @test !isnull(gid)
     free(gid)
     rexec(1) do
@@ -49,6 +49,8 @@ function test3(gid::GID)
     global TERMINATE = true
 end
 
-test()
+function main()
+    test()
+end
 
 end

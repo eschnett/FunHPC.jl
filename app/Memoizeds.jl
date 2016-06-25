@@ -2,7 +2,7 @@ module Memoizeds
 
 # Memoized data for the current iteration
 
-using Comm, Par, Refs
+using Comm, FunRefs, Par
 using Cells, Defs, Domains, Grids, Norms
 
 import Base.wait
@@ -14,23 +14,23 @@ export info_output, file_output
 
 immutable Memoized
     n::Int
-    state::Ref{Domain}
-    rhs::Ref{Domain}
-    error::Ref{Domain}
-    errorNorm::Ref{Norm}
+    state::FunRef{Domain}
+    rhs::FunRef{Domain}
+    error::FunRef{Domain}
+    errorNorm::FunRef{Norm}
     
-    function Memoized(n::Int, state::Ref{Domain})
-        rhs = @par Domain Domains.rhs(get(state))
-        error = @par Domain Domains.error(get(state))
-        errorNorm = @par Norm Domains.norm(get(error))
+    function Memoized(n::Int, state::FunRef{Domain})
+        rhs = par(R=Domain) do; Domains.rhs(state[]) end
+        error = par(R=Domain) do; Domains.error(state[]) end
+        errorNorm = par(R=Norm) do; Domains.norm(error[]) end
         new(n, state, rhs, error, errorNorm)
     end
 end
 
 function wait(m::Memoized)
-    wait(get(m.state))
-    wait(get(m.rhs))
-    wait(get(m.error))
+    wait(m.state[])
+    wait(m.rhs[])
+    wait(m.error[])
     wait(m.errorNorm)
 end
 
@@ -39,18 +39,18 @@ function rk2(m::Memoized)
     s0 = m.state
     r0 = m.rhs
     # Step 1
-    s1 = @par Domain Domains.axpy(0.5 * Defs.dt(), get(r0), get(s0))
-    r1 = @par Domain Domains.rhs(get(s1))
+    s1 = par(R=Domain) do; Domains.axpy(0.5 * Defs.dt(), r0[], s0[]) end
+    r1 = par(R=Domain) do; Domains.rhs(s1[]) end
     # Step 2
-    @par Domain Domains.axpy(Defs.dt(), get(r1), get(s0))
+    par(R=Domain) do; Domains.axpy(Defs.dt(), r1[], s0[]) end
 end
 
 # Output
 # TODO: futurize
 function do_info_output(io::IO, m::Memoized)
-    @assert myproc() == 1
-    s = get(m.state)
-    en = get(m.errorNorm)
+    @assert Comm.myproc() == 1
+    s = m.state[]
+    en = m.errorNorm[]
     cell_size = norm(Cell()).count
     ncells = en.count / cell_size
     println(io, "n=", m.n, " t=", s.t, " ",
@@ -67,10 +67,10 @@ end
 
 # TODO: futurize
 function do_file_output(io::IO, m::Memoized)
-    @assert myproc() == 1
-    s = get(m.state)
-    r = get(m.rhs)
-    en = get(m.errorNorm)
+    @assert Comm.myproc() == 1
+    s = m.state[]
+    r = m.rhs[]
+    en = m.errorNorm[]
     cell_size = norm(Cell()).count
     ncells = en.count / cell_size
     print(io, "State: ", s)

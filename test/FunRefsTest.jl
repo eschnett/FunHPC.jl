@@ -10,7 +10,7 @@ function test_basic(T::Type)
     @test ri[] == i
     rn = FunRef{Union{}}()
     global DONE = false
-    rexec(mod1(2, nprocs())) do
+    rexec(mod1(2, Comm.nprocs())) do
         remote1(i, ri)
     end
     while !DONE yield() end
@@ -22,7 +22,7 @@ function test_remote(do_gc::Bool)
     function inner()
         i = 1
         ri = FunRef(i)
-        maxcount = 1000
+        maxcount = 100 # 1000
         global COUNT = 0
         manyrefs(i, ri, maxcount, do_gc)
         while COUNT<maxcount yield() end
@@ -32,7 +32,7 @@ function test_remote(do_gc::Bool)
     inner()
     global COUNT = 0
     rexec_everywhere(check_refs)
-    while COUNT<nprocs() yield() end
+    while COUNT<Comm.nprocs() yield() end
     sleep(1)
 end
 
@@ -53,7 +53,7 @@ function test_future()
     @test !isready(r0)
     global FUTURE_SET = false
     global FUTURE_DONE = false
-    rexec(mod1(2, nprocs())) do
+    rexec(mod1(2, Comm.nprocs())) do
         future_continued(ri, r0)
     end
     while !FUTURE_SET yield() end
@@ -65,7 +65,7 @@ end
 
 function remote1(i::Int, ri::FunRef)
     @test getproc(ri) == 1
-    @test islocal(ri) == (myproc()==1)
+    @test islocal(ri) == (Comm.myproc()==1)
     rexec(getproc(ri)) do
         remote2(i, ri)
     end
@@ -87,9 +87,9 @@ function manyrefs(i::Int, ri::FunRef, count::Int, do_gc::Bool)
         end
         return
     end
-    proc1 = rand(1:nprocs())
-    proc2 = rand(1:nprocs())
-    proc3 = rand(1:nprocs())
+    proc1 = rand(1:Comm.nprocs())
+    proc2 = rand(1:Comm.nprocs())
+    proc3 = rand(1:Comm.nprocs())
     counta = rand(0:count)
     countb = rand(0:count)
     count1 = min(counta, countb)
@@ -130,12 +130,12 @@ end
 
 function future_continued(ri::FunRef, r0::FunRef)
     @test isready(ri)
-    @test islocal(ri) == (nprocs()==1)
+    @test islocal(ri) == (Comm.nprocs()==1)
     rj = typeof(ri)()
     @test !isready(rj)
     set_from_ref!(rj, ri)
     @test isready(rj)
-    @test islocal(rj) == (nprocs()==1)
+    @test islocal(rj) == (Comm.nprocs()==1)
     @test !isready(r0)
     rexec(1) do
         future_set()
@@ -163,7 +163,5 @@ function main()
     test_remote(false)
     test_future()
 end
-
-main()
 
 end
