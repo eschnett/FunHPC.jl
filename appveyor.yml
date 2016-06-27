@@ -14,17 +14,25 @@ notifications:
     on_build_status_changed: false
 
 install:
-# Download most recent Julia Windows binary
+  # Download and install Windows MPI
+  - ps: (new-object net.webclient).DownloadFile(
+        "https://download.microsoft.com/download/D/7/B/D7BBA00F-71B7-436B-80BC-4D22F2EE9862/MSMpiSetup.exe",
+        "C:\projects\MSMpiSetup.exe")
+  - C:\projects\MSMpiSetup.exe -unattend -minimal
+  - set PATH=C:\Program Files\Microsoft MPI\Bin;%PATH%
+  # Download most recent Julia Windows binary
   - ps: (new-object net.webclient).DownloadFile(
         $("http://s3.amazonaws.com/"+$env:JULIAVERSION),
         "C:\projects\julia-binary.exe")
-# Run installer silently, output to C:\projects\julia
+  # Run installer silently, output to C:\projects\julia
   - C:\projects\julia-binary.exe /S /D=C:\projects\julia
 
 build_script:
-# Need to convert from shallow to complete for Pkg.clone to work
+  # Need to convert from shallow to complete for Pkg.clone to work
   - IF EXIST .git\shallow (git fetch --unshallow)
-  - C:\projects\julia\bin\julia -e "versioninfo();Pkg.clone(pwd(), \"FunHPC\")"
+  - C:\projects\julia\bin\julia -e "versioninfo();
+      Pkg.clone(pwd(), \"MPI\"); Pkg.build(\"MPI\");
+      Pkg.clone(pwd(), \"FunHPC\")"
 
 test_script:
   - C:\projects\julia\bin\julia --check-bounds=yes -e "Pkg.test(\"FunHPC\")"
