@@ -1,5 +1,5 @@
-These TODO's were simply collected by searching for 'TODO' in the search bar.
-Thought it would merit some cleaner structure for future PRs.
+#Remaining TODOs in FunHPC.jl
+-------------------
 
 1. [Don't check s.t at every iteration in app/Wave.jl](https://github.com/eschnett/FunHPC.jl/app/Wave.jl#L26)
 
