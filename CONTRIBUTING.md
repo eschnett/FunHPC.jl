@@ -1,4 +1,4 @@
-#Remaining TODOs in FunHPC.jl
+Remaining TODOs in FunHPC.jl
 -------------------
 
 1. [Don't check s.t at every iteration in app/Wave.jl](https://github.com/eschnett/FunHPC.jl/app/Wave.jl#L26)
